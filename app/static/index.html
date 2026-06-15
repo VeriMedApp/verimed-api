@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="de" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VeriMed &middot; Abrechnungs-Simulator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50:'#eef6ff',100:'#d9ebff',500:'#2563eb',600:'#1d4ed8',700:'#1e40af' },
+          },
+          fontFamily: { sans: ['Inter','ui-sans-serif','system-ui','sans-serif'] },
+        },
+      },
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .fade-in { animation: fadeIn .4s ease-out; }
+    @keyframes fadeIn { from { opacity:0; transform: translateY(8px);} to {opacity:1; transform:none;} }
+    input[type="datetime-local"]::-webkit-calendar-picker-indicator { cursor: pointer; }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-800">
+
+  <!-- Header -->
+  <header class="bg-gradient-to-r from-brand-700 via-brand-600 to-brand-500 text-white shadow-lg">
+    <div class="max-w-6xl mx-auto px-6 py-7 flex items-center justify-between flex-wrap gap-4">
+      <div class="flex items-center gap-3">
+        <div class="h-11 w-11 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center text-2xl">🩺</div>
+        <div>
+          <h1 class="text-2xl font-extrabold tracking-tight">Project VeriMed</h1>
+          <p class="text-brand-100 text-sm">GOÄ-Abrechnungs-Simulator &middot; Geofencing &amp; Plausibilität</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 text-sm bg-white/10 px-3 py-1.5 rounded-full">
+        <span id="apiDot" class="h-2.5 w-2.5 rounded-full bg-amber-300 animate-pulse"></span>
+        <span id="apiStatus">Verbinde mit API …</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-5 gap-6">
+
+    <!-- Left column: Inputs -->
+    <div class="lg:col-span-3 space-y-6">
+
+      <!-- Section A: Geofencing Simulator -->
+      <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+        <div class="flex items-center gap-2 mb-4">
+          <span class="h-7 w-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center text-sm font-bold">A</span>
+          <h2 class="text-lg font-bold">Geofencing-Simulator</h2>
+        </div>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-600 mb-1">Praxis-Name</label>
+            <input id="praxisName" type="text" value="Praxis Dr. Mustermann"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none" />
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-slate-600 mb-1">Ankunft (Geofence)</label>
+              <input id="arrival" type="datetime-local"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-brand-500 outline-none" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-600 mb-1">Abfahrt (Geofence)</label>
+              <input id="departure" type="datetime-local"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-brand-500 outline-none" />
+            </div>
+          </div>
+          <div class="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3 border border-slate-100">
+            <span class="text-sm text-slate-500">Simulierte Aufenthaltsdauer</span>
+            <span id="durationTicker" class="text-2xl font-extrabold text-brand-600 tabular-nums">– min</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section B: Ziffern Selector -->
+      <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="h-7 w-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center text-sm font-bold">B</span>
+          <h2 class="text-lg font-bold">Abgerechnete GOÄ-Ziffern</h2>
+        </div>
+        <p class="text-sm text-slate-500 mb-4">Live aus dem Katalog geladen. Faktor je Ziffer anpassbar.</p>
+        <div id="zifferList" class="space-y-3">
+          <div class="text-slate-400 text-sm py-6 text-center">Lade Katalog …</div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Right column: Verifier + Report -->
+    <div class="lg:col-span-2 space-y-6">
+      <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 sticky top-6">
+        <div class="flex items-center gap-2 mb-4">
+          <span class="h-7 w-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center text-sm font-bold">C</span>
+          <h2 class="text-lg font-bold">Verifizierung</h2>
+        </div>
+        <div class="bg-slate-50 rounded-xl p-4 mb-4 text-sm space-y-1 border border-slate-100">
+          <div class="flex justify-between"><span class="text-slate-500">Aufenthalt</span><span id="sumDuration" class="font-semibold tabular-nums">–</span></div>
+          <div class="flex justify-between"><span class="text-slate-500">Benötigte Behandlungszeit</span><span id="sumRequired" class="font-semibold tabular-nums">–</span></div>
+          <div class="flex justify-between"><span class="text-slate-500">Ausgewählte Ziffern</span><span id="sumCount" class="font-semibold tabular-nums">0</span></div>
+        </div>
+        <button id="verifyBtn"
+          class="w-full bg-brand-600 hover:bg-brand-700 active:scale-[.99] transition text-white font-bold text-lg rounded-xl py-3.5 shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
+          Abrechnung prüfen
+        </button>
+        <div id="report" class="mt-5"></div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="max-w-6xl mx-auto px-6 py-8 text-center text-xs text-slate-400">
+    Project VeriMed &middot; Demo-Simulator &middot; Keine Rechtsberatung
+  </footer>
+
+  <script>
+    const API = '/api/v1/claims';
+    let catalog = [];
+
+    const $ = (id) => document.getElementById(id);
+
+    // --- Defaults: heute 09:00 -> 09:12 ---
+    function initTimes() {
+      const d = new Date(); d.setSeconds(0,0); d.setHours(9,0);
+      const dep = new Date(d.getTime() + 12*60000);
+      $('arrival').value = toLocalInput(d);
+      $('departure').value = toLocalInput(dep);
+    }
+    function toLocalInput(dt) {
+      const off = dt.getTimezoneOffset();
+      const local = new Date(dt.getTime() - off*60000);
+      return local.toISOString().slice(0,16);
+    }
+    function durationMinutes() {
+      const a = $('arrival').value, b = $('departure').value;
+      if (!a || !b) return null;
+      const diff = (new Date(b) - new Date(a)) / 60000;
+      return diff;
+    }
+
+    // --- Live ticker ---
+    function updateTicker() {
+      const m = durationMinutes();
+      const t = $('durationTicker');
+      if (m === null) { t.textContent = '– min'; t.className = 'text-2xl font-extrabold text-slate-400 tabular-nums'; }
+      else if (m <= 0) { t.textContent = 'ungültig'; t.className = 'text-2xl font-extrabold text-red-500 tabular-nums'; }
+      else { t.textContent = m.toFixed(0) + ' min'; t.className = 'text-2xl font-extrabold text-brand-600 tabular-nums'; }
+      $('sumDuration').textContent = (m && m > 0) ? m.toFixed(0)+' min' : '–';
+      updateRequired();
+    }
+
+    function selectedItems() {
+      return catalog
+        .filter(z => $('chk_'+z.ziffer)?.checked)
+        .map(z => ({ ziffer: z.ziffer, multiplier: parseFloat($('mul_'+z.ziffer).value) || 1.0, rule_time: z.rule_time_minutes }));
+    }
+    function updateRequired() {
+      const items = selectedItems();
+      const req = items.reduce((s,i)=> s + (i.rule_time||0), 0);
+      $('sumRequired').textContent = items.length ? req+' min' : '–';
+      $('sumCount').textContent = items.length;
+    }
+
+    // --- API health ---
+    async function checkHealth() {
+      try {
+        const r = await fetch('/health'); const j = await r.json();
+        $('apiStatus').textContent = 'API verbunden';
+        $('apiDot').className = 'h-2.5 w-2.5 rounded-full bg-emerald-300';
+      } catch {
+        $('apiStatus').textContent = 'API nicht erreichbar';
+        $('apiDot').className = 'h-2.5 w-2.5 rounded-full bg-red-400';
+      }
+    }
+
+    // --- Load catalog ---
+    async function loadCatalog() {
+      const list = $('zifferList');
+      try {
+        const r = await fetch(API + '/catalog');
+        if (!r.ok) throw new Error('HTTP '+r.status);
+        catalog = await r.json();
+        if (!catalog.length) { list.innerHTML = '<div class="text-slate-400 text-sm py-6 text-center">Katalog ist leer.</div>'; return; }
+        list.innerHTML = catalog.map(z => `
+          <label class="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-brand-400 hover:bg-brand-50/40 transition cursor-pointer">
+            <input id="chk_${z.ziffer}" type="checkbox" class="h-5 w-5 rounded text-brand-600 focus:ring-brand-500" onchange="updateRequired()" />
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold bg-slate-800 text-white px-2 py-0.5 rounded">Ziffer ${z.ziffer}</span>
+                <span class="text-xs text-slate-400">${z.rule_time_minutes} min</span>
+              </div>
+              <div class="text-sm font-medium text-slate-700 truncate mt-1">${z.title_patient}</div>
+              <div class="text-xs text-slate-400 truncate">${z.title_official}</div>
+            </div>
+            <div class="text-right">
+              <label class="block text-[10px] text-slate-400 uppercase tracking-wide">Faktor</label>
+              <input id="mul_${z.ziffer}" type="number" step="0.1" min="0.1" value="2.3"
+                class="w-20 text-right rounded-lg border border-slate-300 px-2 py-1 text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                onchange="updateRequired()" />
+            </div>
+          </label>
+        `).join('');
+        updateRequired();
+      } catch (e) {
+        list.innerHTML = `<div class="text-red-500 text-sm py-6 text-center">Katalog konnte nicht geladen werden (${e.message}).</div>`;
+      }
+    }
+
+    // --- Verify ---
+    async function verify() {
+      const btn = $('verifyBtn');
+      const report = $('report');
+      const items = selectedItems();
+      const dur = durationMinutes();
+
+      if (!items.length) { report.innerHTML = warnBox('Bitte mindestens eine Ziffer auswählen.'); return; }
+      if (dur === null || dur <= 0) { report.innerHTML = warnBox('Bitte gültige Geofence-Zeiten angeben (Abfahrt nach Ankunft).'); return; }
+
+      const payload = {
+        patient_id: 'sim-' + Date.now(),
+        praxis_name: $('praxisName').value || 'Unbenannte Praxis',
+        geofence_arrival: new Date($('arrival').value).toISOString(),
+        geofence_departure: new Date($('departure').value).toISOString(),
+        total_billed_amount: 0,
+        billed_ziffern: items.map(i => ({ ziffer: i.ziffer, multiplier: i.multiplier })),
+      };
+
+      btn.disabled = true; btn.textContent = 'Prüfe …';
+      try {
+        const r = await fetch(API + '/validate', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || ('HTTP '+r.status));
+        renderReport(data);
+      } catch (e) {
+        report.innerHTML = warnBox('Fehler bei der Prüfung: ' + e.message);
+      } finally {
+        btn.disabled = false; btn.textContent = 'Abrechnung prüfen';
+      }
+    }
+
+    function warnBox(msg) {
+      return `<div class="fade-in rounded-xl bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 text-sm">${msg}</div>`;
+    }
+
+    function renderReport(data) {
+      const clean = data.status === 'processed_clean';
+      const anomalies = data.anomalies || [];
+
+      const head = clean
+        ? `<div class="fade-in rounded-2xl bg-emerald-50 border-2 border-emerald-300 p-5 text-center">
+             <div class="text-5xl mb-2">✅</div>
+             <div class="text-xl font-extrabold text-emerald-700">Rechnung fehlerfrei</div>
+             <div class="text-sm text-emerald-600 mt-1">Keine Auffälligkeiten festgestellt.</div>
+           </div>`
+        : `<div class="fade-in rounded-2xl bg-red-50 border-2 border-red-300 p-5 text-center">
+             <div class="text-5xl mb-2">⚠️</div>
+             <div class="text-xl font-extrabold text-red-700">Auffälligkeiten gefunden</div>
+             <div class="text-sm text-red-600 mt-1">${anomalies.length} Hinweis(e) zur Prüfung.</div>
+           </div>`;
+
+      const metrics = `
+        <div class="grid grid-cols-2 gap-3 mt-4 text-sm">
+          <div class="bg-slate-50 rounded-lg p-3 border border-slate-100">
+            <div class="text-slate-400 text-xs">Aufenthalt</div>
+            <div class="font-bold tabular-nums">${data.actual_duration_minutes} min</div>
+          </div>
+          <div class="bg-slate-50 rounded-lg p-3 border border-slate-100">
+            <div class="text-slate-400 text-xs">Benötigt (inkl. ${data.time_tolerance_minutes} min Toleranz)</div>
+            <div class="font-bold tabular-nums">${data.required_treatment_time_minutes} min</div>
+          </div>
+        </div>`;
+
+      const iconFor = (t) => t === 'time_anomaly' ? '⏱️' : (t === 'exclusion_anomaly' ? '🚫' : '❓');
+      const labelFor = (t) => t === 'time_anomaly' ? 'Zeit-Konflikt' : (t === 'exclusion_anomaly' ? 'Ausschluss-Konflikt' : 'Unbekannte Ziffer');
+
+      const anomalyHtml = anomalies.length ? `
+        <div class="mt-4 space-y-2">
+          ${anomalies.map(a => `
+            <div class="rounded-xl border ${a.severity==='critical'?'border-red-200 bg-red-50':'border-amber-200 bg-amber-50'} p-3">
+              <div class="flex items-center gap-2 mb-1">
+                <span>${iconFor(a.type)}</span>
+                <span class="font-bold text-sm ${a.severity==='critical'?'text-red-700':'text-amber-700'}">${labelFor(a.type)}</span>
+                ${a.related_ziffern?.length ? `<span class="text-xs text-slate-500">(${a.related_ziffern.map(z=>'Ziffer '+z).join(', ')})</span>` : ''}
+              </div>
+              <p class="text-sm text-slate-600">${a.message}</p>
+            </div>`).join('')}
+        </div>` : '';
+
+      const details = `
+        <div class="mt-5">
+          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Geprüfte Ziffern</div>
+          <div class="space-y-1.5">
+            ${(data.ziffer_details||[]).map(d => `
+              <div class="flex items-center gap-2 text-sm">
+                <span class="text-xs font-bold ${d.known?'bg-slate-800':'bg-amber-500'} text-white px-2 py-0.5 rounded">${d.ziffer}</span>
+                <span class="flex-1 text-slate-600 truncate">${d.title_patient || 'Im Katalog nicht gefunden'}</span>
+                <span class="text-xs text-slate-400">×${d.multiplier}</span>
+              </div>`).join('')}
+          </div>
+        </div>`;
+
+      $('report').innerHTML = head + metrics + anomalyHtml + details;
+    }
+
+    // --- Wire up ---
+    ['arrival','departure'].forEach(id => $(id).addEventListener('input', updateTicker));
+    $('verifyBtn').addEventListener('click', verify);
+
+    initTimes();
+    updateTicker();
+    checkHealth();
+    loadCatalog();
+    setInterval(updateTicker, 1000); // live ticker
+  </script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+# Render Blueprint fuer Project VeriMed
+# Deploy: Render Dashboard -> New -> Blueprint -> dieses Repo verbinden
+# Docs: https://render.com/docs/blueprint-spec
+
+databases:
+  - name: verimed-db
+    databaseName: verimed
+    user: verimed
+    plan: free
+
+services:
+  - type: web
+    name: verimed-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: verimed-db
+          property: connectionString
+      - key: DEBUG
+        value: "false"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: TIME_TOLERANCE_MINUTES
+        value: "10"
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        value: "*"
