@@ -53,10 +53,55 @@
   <!-- Main input flow -->
   <main id="inputFlow" class="max-w-md mx-auto px-4 py-4 space-y-4">
 
-    <!-- Section A: Zeit -->
+    <!-- Section A: Rechnung erfassen (Foto-Upload zuerst, immer ohne Scrollen sichtbar) -->
     <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
       <div class="flex items-center gap-2 mb-3">
         <span class="h-6 w-6 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center text-xs font-bold shrink-0">1</span>
+        <h2 class="text-base font-bold">Rechnung erfassen</h2>
+      </div>
+
+      <!-- Tabs -->
+      <div class="grid grid-cols-2 gap-2 mb-4 bg-slate-100 rounded-xl p-1">
+        <button id="tabBtnFoto" type="button" class="tabBtn min-h-[40px] rounded-lg text-sm font-bold transition">📷 Foto</button>
+        <button id="tabBtnManual" type="button" class="tabBtn min-h-[40px] rounded-lg text-sm font-bold transition">✍️ Manuell</button>
+      </div>
+
+      <!-- Foto tab -->
+      <div id="tabFoto" class="space-y-3">
+        <label for="cameraInput" class="flex flex-col items-center justify-center gap-1 border-2 border-dashed border-brand-300 rounded-2xl py-5 px-4 bg-brand-50/50 active:scale-[.98] transition cursor-pointer">
+          <span class="text-4xl leading-none">📷</span>
+          <span class="font-bold text-brand-700 text-sm text-center leading-snug">Rechnung fotografieren<br/>／ Datei hochladen</span>
+          <span class="text-xs text-slate-500 text-center">Kamera öffnet sich automatisch &middot; JPEG, PNG oder PDF</span>
+          <input id="cameraInput" type="file" accept="image/*,application/pdf" capture="environment" class="hidden" />
+        </label>
+
+        <div id="photoPreviewWrap" class="hidden fade-in rounded-2xl border border-slate-200 p-3 flex items-center gap-3">
+          <img id="photoPreview" class="h-16 w-16 rounded-xl object-cover bg-slate-100 shrink-0" alt="Vorschau der fotografierten Rechnung" />
+          <div class="min-w-0 flex-1">
+            <div id="photoFileName" class="text-sm font-semibold truncate">rechnung.jpg</div>
+            <div id="photoStatus" class="text-xs text-emerald-600 font-medium">✅ Bereit zur Prüfung</div>
+          </div>
+          <button id="removePhotoBtn" type="button" class="h-9 w-9 shrink-0 rounded-full bg-slate-100 text-slate-500 font-bold active:scale-90 transition">✕</button>
+        </div>
+        <p class="text-[11px] text-slate-400 leading-snug px-1">
+          Hinweis: Die Texterkennung läuft serverseitig. Ist auf diesem Server keine OCR-Engine verfügbar,
+          können Sie die Ziffern jederzeit unter „✍️ Manuell” selbst auswählen.
+        </p>
+      </div>
+
+      <!-- Manual tab -->
+      <div id="tabManual" class="hidden space-y-3">
+        <p class="text-xs text-slate-500">Ziffer antippen zum Auswählen. Faktor &gt; 2,3 erfordert eine Begründung.</p>
+        <div id="zifferList" class="space-y-2.5">
+          <div class="text-slate-400 text-sm py-6 text-center">Lade Katalog …</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section B: Zeit -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="h-6 w-6 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center text-xs font-bold shrink-0">2</span>
         <h2 class="text-base font-bold">Wie lange waren Sie in der Praxis?</h2>
       </div>
 
@@ -86,51 +131,6 @@
       <div class="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3 mt-3 border border-slate-100">
         <span class="text-sm text-slate-500">Aufenthaltsdauer</span>
         <span id="durationTicker" class="text-2xl font-extrabold text-brand-600 tabular-nums">– min</span>
-      </div>
-    </section>
-
-    <!-- Section B: Rechnung erfassen -->
-    <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
-      <div class="flex items-center gap-2 mb-3">
-        <span class="h-6 w-6 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center text-xs font-bold shrink-0">2</span>
-        <h2 class="text-base font-bold">Rechnung erfassen</h2>
-      </div>
-
-      <!-- Tabs -->
-      <div class="grid grid-cols-2 gap-2 mb-4 bg-slate-100 rounded-xl p-1">
-        <button id="tabBtnFoto" type="button" class="tabBtn min-h-[40px] rounded-lg text-sm font-bold transition">📷 Foto</button>
-        <button id="tabBtnManual" type="button" class="tabBtn min-h-[40px] rounded-lg text-sm font-bold transition">✍️ Manuell</button>
-      </div>
-
-      <!-- Foto tab -->
-      <div id="tabFoto" class="space-y-3">
-        <label for="cameraInput" class="flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-brand-300 rounded-2xl py-8 px-4 bg-brand-50/50 active:scale-[.98] transition cursor-pointer">
-          <span class="text-4xl">📷</span>
-          <span class="font-bold text-brand-700 text-sm">Rechnung fotografieren</span>
-          <span class="text-xs text-slate-500 text-center">Kamera öffnet sich automatisch &middot; JPEG, PNG oder PDF</span>
-        </label>
-        <input id="cameraInput" type="file" accept="image/*,application/pdf" capture="environment" class="hidden" />
-
-        <div id="photoPreviewWrap" class="hidden fade-in rounded-2xl border border-slate-200 p-3 flex items-center gap-3">
-          <img id="photoPreview" class="h-16 w-16 rounded-xl object-cover bg-slate-100 shrink-0" alt="Vorschau der fotografierten Rechnung" />
-          <div class="min-w-0 flex-1">
-            <div id="photoFileName" class="text-sm font-semibold truncate">rechnung.jpg</div>
-            <div id="photoStatus" class="text-xs text-emerald-600 font-medium">✅ Bereit zur Prüfung</div>
-          </div>
-          <button id="removePhotoBtn" type="button" class="h-9 w-9 shrink-0 rounded-full bg-slate-100 text-slate-500 font-bold active:scale-90 transition">✕</button>
-        </div>
-        <p class="text-[11px] text-slate-400 leading-snug px-1">
-          Hinweis: Die Texterkennung läuft serverseitig. Ist auf diesem Server keine OCR-Engine verfügbar,
-          können Sie die Ziffern jederzeit unter „✍️ Manuell” selbst auswählen.
-        </p>
-      </div>
-
-      <!-- Manual tab -->
-      <div id="tabManual" class="hidden space-y-3">
-        <p class="text-xs text-slate-500">Ziffer antippen zum Auswählen. Faktor &gt; 2,3 erfordert eine Begründung.</p>
-        <div id="zifferList" class="space-y-2.5">
-          <div class="text-slate-400 text-sm py-6 text-center">Lade Katalog …</div>
-        </div>
       </div>
     </section>
   </main>
