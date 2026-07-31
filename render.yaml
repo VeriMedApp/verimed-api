@@ -1,28 +1,25 @@
-# Render Blueprint fuer Project VeriMed
+# Render Blueprint fuer Project VeriMed (Docker-Runtime mit Tesseract-OCR)
 # Deploy: Render Dashboard -> New -> Blueprint -> dieses Repo verbinden
 # Docs: https://render.com/docs/blueprint-spec
-
-databases:
-  - name: verimed-db
-    databaseName: verimed
-    user: verimed
-    plan: free
+#
+# WARNUNG: DATABASE_URL zeigt hier bewusst auf eine lokale SQLite-Datei im
+# Container (./verimed.db). Render-Webdienste haben KEIN persistentes
+# Dateisystem, sofern nicht explizit eine "disk" gemountet wird - ohne diese
+# gehen alle Daten (inkl. verschluesselter Patientendaten) bei jedem Deploy,
+# Neustart oder Scaling-Event verloren. Fuer produktiven Einsatz entweder
+# unten einen "disk"-Mount ergaenzen oder auf eine verwaltete PostgreSQL-
+# Datenbank zurueckwechseln (siehe DEPLOY.md).
 
 services:
   - type: web
-    name: verimed-api
-    runtime: python
+    name: verimed-backend
+    env: docker
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    dockerfilePath: ./Dockerfile
     healthCheckPath: /health
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.12.7"
       - key: DATABASE_URL
-        fromDatabase:
-          name: verimed-db
-          property: connectionString
+        value: sqlite+aiosqlite:///./verimed.db
       - key: DEBUG
         value: "false"
       - key: LOG_LEVEL

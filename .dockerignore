@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Datenbank (lokal)
+*.db
+*.sqlite3
+
+# Umgebung / Secrets
+.env
+
+# Versionskontrolle / IDE / OS
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+
+# Sonstiges, das nicht ins Image gehoert
+*.md
+uverr.txt
+uvlog.txt
+.claude/
