@@ -1,0 +1,232 @@
+"""OCR- und Text-Parsing-Service fuer eingescannte/fotografierte GOAE-Rechnungen.
+
+Extrahiert aus hochgeladenen Bild- (JPEG/PNG) oder PDF-Dateien die
+abgerechneten GOAE-Ziffern, Steigerungsfaktoren und etwaige schriftliche
+Begruendungen mittels einfacher Regex-/String-Heuristiken auf dem erkannten
+Rohtext. Es kommt bewusst keine schwergewichtige ML-OCR-Pipeline zum Einsatz:
+
+* PDFs mit eingebetteter Textebene werden ueber ``pypdf`` gelesen.
+* Fotografierte Bilder (JPEG/PNG) werden ueber ``pytesseract`` (Tesseract
+  OCR) in Text umgewandelt, sofern die Tesseract-Systembinary auf dem
+  Zielhost verfuegbar ist. Ist sie es nicht (z.B. auf einem einfachen
+  Render-Python-Webservice ohne zusaetzliche apt-Pakete), wird ein klarer
+  ``OCREngineUnavailableError`` ausgeloest, statt die Anfrage
+  stillschweigend fehlschlagen zu lassen oder falsche Daten zu erzeugen.
+"""
+
+from __future__ import annotations
+
+import io
+import logging
+import re
+from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
+
+try:
+    from PIL import Image
+except ImportError:  # pragma: no cover - optionale Abhaengigkeit
+    Image = None  # type: ignore[assignment]
+
+try:
+    import pytesseract
+except ImportError:  # pragma: no cover - optionale Abhaengigkeit
+    pytesseract = None  # type: ignore[assignment]
+
+try:
+    from pypdf import PdfReader
+except ImportError:  # pragma: no cover - optionale Abhaengigkeit
+    PdfReader = None  # type: ignore[assignment]
+
+
+class OCRError(Exception):
+    """Basisfehler bei der Rechnungs-Texterkennung/-Extraktion."""
+
+
+class UnsupportedFileTypeError(OCRError):
+    """Der hochgeladene Dateityp wird nicht unterstuetzt."""
+
+
+class OCREngineUnavailableError(OCRError):
+    """Die benoetigte OCR-/PDF-Engine ist auf diesem Host nicht verfuegbar."""
+
+
+SUPPORTED_IMAGE_TYPES = {"image/jpeg", "image/jpg", "image/png"}
+SUPPORTED_PDF_TYPES = {"application/pdf"}
+
+# GOAE-Regelhoechstsatz ohne gesonderte Begruendung (siehe auch validator.py).
+DEFAULT_MULTIPLIER = 2.3
+
+
+@dataclass
+class ParsedZiffer:
+    """Eine aus dem Rechnungstext erkannte, abgerechnete GOAE-Position."""
+
+    ziffer: str
+    multiplier: float = DEFAULT_MULTIPLIER
+    justification: str | None = None
+    raw_line: str = ""
+
+
+@dataclass
+class ParsedInvoice:
+    """Ergebnis des Parsings einer hochgeladenen Rechnung."""
+
+    ziffern: list[ParsedZiffer] = field(default_factory=list)
+    justification: str | None = None
+    raw_text: str = ""
+
+
+# --- Regex-Heuristiken --------------------------------------------------------
+# Erkennt z.B. "Ziffer 1", "Ziff. 5", "GOÄ 3", "GOA 250", "Nr. 250".
+_ZIFFER_PATTERN = re.compile(
+    r"(?:Ziffer|Ziff\.?|GO[ÄA]E?|Nr\.?)\s*[:.\-]?\s*(\d{1,4})",
+    re.IGNORECASE,
+)
+# Erkennt z.B. "2,3-fach", "3,5-fach", "2.3fach", "3,5x".
+_MULTIPLIER_FACH_PATTERN = re.compile(
+    r"(\d+(?:[.,]\d+)?)\s*[-\s]?(?:fach|x)\b",
+    re.IGNORECASE,
+)
+# Erkennt z.B. "Faktor 2,3", "Faktor: 3.5", "Faktor=2,3".
+_MULTIPLIER_FAKTOR_PATTERN = re.compile(
+    r"Faktor\s*[:=]?\s*(\d+(?:[.,]\d+)?)",
+    re.IGNORECASE,
+)
+# Erkennt Text nach "Begründung:" / "Begruendung -" bis zum Zeilenende.
+_JUSTIFICATION_PATTERN = re.compile(
+    r"Begr[uü]ndung\s*[:\-]\s*(.+)",
+    re.IGNORECASE,
+)
+
+
+def _to_float(raw: str) -> float:
+    """Wandelt eine erkannte Zahl (deutsches oder englisches Format) in float."""
+    return float(raw.replace(",", "."))
+
+
+def _guess_suffix(filename: str | None) -> str:
+    name = (filename or "").lower()
+    return name.rsplit(".", 1)[-1] if "." in name else ""
+
+
+def extract_text(filename: str | None, content_type: str | None, data: bytes) -> str:
+    """Extrahiert Rohtext aus einer hochgeladenen Rechnungsdatei (PDF oder Bild)."""
+    ctype = (content_type or "").lower()
+    suffix = _guess_suffix(filename)
+
+    if ctype in SUPPORTED_PDF_TYPES or suffix == "pdf":
+        return _extract_text_from_pdf(data)
+    if ctype in SUPPORTED_IMAGE_TYPES or suffix in {"jpg", "jpeg", "png"}:
+        return _extract_text_from_image(data)
+
+    raise UnsupportedFileTypeError(
+        f"Dateityp '{content_type or suffix or 'unbekannt'}' wird nicht "
+        "unterstuetzt. Bitte JPEG, PNG oder PDF hochladen."
+    )
+
+
+def _extract_text_from_pdf(data: bytes) -> str:
+    if PdfReader is None:
+        raise OCREngineUnavailableError(
+            "PDF-Verarbeitung ist auf diesem Server nicht verfuegbar "
+            "(Python-Paket 'pypdf' fehlt)."
+        )
+    try:
+        reader = PdfReader(io.BytesIO(data))
+        pages_text = [page.extract_text() or "" for page in reader.pages]
+    except Exception as exc:  # defensiv: beschaedigte/verschluesselte PDFs
+        raise OCRError(f"PDF konnte nicht gelesen werden: {exc}") from exc
+
+    text = "\n".join(pages_text).strip()
+    if not text:
+        raise OCRError(
+            "Im PDF wurde keine auslesbare Textebene gefunden. Vermutlich "
+            "handelt es sich um ein eingescanntes Bild-PDF ohne Textlayer."
+        )
+    return text
+
+
+def _extract_text_from_image(data: bytes) -> str:
+    if Image is None or pytesseract is None:
+        raise OCREngineUnavailableError(
+            "Bilderkennung (OCR) ist auf diesem Server nicht verfuegbar. Es "
+            "fehlen die Python-Pakete 'Pillow'/'pytesseract' oder die "
+            "Tesseract-OCR-Systembinary auf dem Host."
+        )
+    try:
+        image = Image.open(io.BytesIO(data))
+        image = image.convert("L")  # Graustufen verbessern die OCR-Trefferquote.
+        text = pytesseract.image_to_string(image, lang="deu+eng")
+    except pytesseract.TesseractNotFoundError as exc:
+        raise OCREngineUnavailableError(
+            "Die Tesseract-OCR-Systembinary ist auf diesem Host nicht "
+            "installiert. Bilderkennung ist daher aktuell nicht moeglich; "
+            "bitte alternativ ein PDF mit Textebene hochladen."
+        ) from exc
+    except OCRError:
+        raise
+    except Exception as exc:  # defensiv: unlesbare/kaputte Bilddateien
+        raise OCRError(f"Bild konnte nicht verarbeitet werden: {exc}") from exc
+
+    text = text.strip()
+    if not text:
+        raise OCRError(
+            "Im Bild konnte kein Text erkannt werden. Bitte ein schaerferes, "
+            "besser beleuchtetes Foto der Rechnung aufnehmen."
+        )
+    return text
+
+
+def parse_invoice_text(text: str) -> ParsedInvoice:
+    """Extrahiert GOAE-Ziffern, Steigerungsfaktoren und Begruendung aus Text."""
+    justification_match = _JUSTIFICATION_PATTERN.search(text)
+    justification = (
+        justification_match.group(1).strip() if justification_match else None
+    )
+
+    ziffern: list[ParsedZiffer] = []
+    seen: set[str] = set()
+    for line in text.splitlines():
+        for ziffer_match in _ZIFFER_PATTERN.finditer(line):
+            ziffer = ziffer_match.group(1)
+            if ziffer in seen:
+                continue
+
+            multiplier = DEFAULT_MULTIPLIER
+            mult_match = _MULTIPLIER_FACH_PATTERN.search(
+                line
+            ) or _MULTIPLIER_FAKTOR_PATTERN.search(line)
+            if mult_match:
+                try:
+                    multiplier = _to_float(mult_match.group(1))
+                except ValueError:
+                    multiplier = DEFAULT_MULTIPLIER
+
+            seen.add(ziffer)
+            ziffern.append(
+                ParsedZiffer(
+                    ziffer=ziffer,
+                    multiplier=multiplier,
+                    justification=(
+                        justification if multiplier > DEFAULT_MULTIPLIER else None
+                    ),
+                    raw_line=line.strip(),
+                )
+            )
+
+    return ParsedInvoice(ziffern=ziffern, justification=justification, raw_text=text)
+
+
+def parse_uploaded_invoice(
+    filename: str | None, content_type: str | None, data: bytes
+) -> ParsedInvoice:
+    """High-level Einstiegspunkt: Datei -> Rohtext -> geparste Rechnung."""
+    text = extract_text(filename, content_type, data)
+    parsed = parse_invoice_text(text)
+    logger.info(
+        "Rechnung geparst: %d Ziffer(n) erkannt, Begruendung vorhanden=%s",
+        len(parsed.ziffern),
+        bool(parsed.justification),
+    )
+    return parsed

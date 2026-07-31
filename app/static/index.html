@@ -2,8 +2,9 @@
 <html lang="de" class="scroll-smooth">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>VeriMed &middot; Abrechnungs-Simulator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1" />
+  <meta name="theme-color" content="#1d4ed8" />
+  <title>VeriMed &middot; Abrechnungs-Check</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -21,304 +22,529 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
     body { font-family: 'Inter', sans-serif; }
-    .fade-in { animation: fadeIn .4s ease-out; }
+    .fade-in { animation: fadeIn .35s ease-out; }
     @keyframes fadeIn { from { opacity:0; transform: translateY(8px);} to {opacity:1; transform:none;} }
-    input[type="datetime-local"]::-webkit-calendar-picker-indicator { cursor: pointer; }
+    .safe-bottom { padding-bottom: calc(0.85rem + env(safe-area-inset-bottom)); }
+    .safe-top { padding-top: calc(0.5rem + env(safe-area-inset-top)); }
+    input[type="time"] { -webkit-appearance: none; }
+    .tap { -webkit-tap-highlight-color: transparent; }
+    ::-webkit-scrollbar { display: none; }
   </style>
 </head>
-<body class="min-h-screen bg-slate-50 text-slate-800">
+<body class="min-h-screen bg-slate-50 text-slate-800 tap pb-32">
 
   <!-- Header -->
-  <header class="bg-gradient-to-r from-brand-700 via-brand-600 to-brand-500 text-white shadow-lg">
-    <div class="max-w-6xl mx-auto px-6 py-7 flex items-center justify-between flex-wrap gap-4">
-      <div class="flex items-center gap-3">
-        <div class="h-11 w-11 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center text-2xl">🩺</div>
-        <div>
-          <h1 class="text-2xl font-extrabold tracking-tight">Project VeriMed</h1>
-          <p class="text-brand-100 text-sm">GOÄ-Abrechnungs-Simulator &middot; Geofencing &amp; Plausibilität</p>
+  <header class="safe-top sticky top-0 z-30 bg-gradient-to-r from-brand-700 via-brand-600 to-brand-500 text-white shadow-lg">
+    <div class="max-w-md mx-auto px-4 pb-4 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2.5">
+        <div class="h-10 w-10 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center text-xl shrink-0">🩺</div>
+        <div class="min-w-0">
+          <h1 class="text-lg font-extrabold tracking-tight leading-tight">VeriMed</h1>
+          <p class="text-brand-100 text-[11px] leading-tight truncate">GOÄ-Abrechnungs-Check</p>
         </div>
       </div>
-      <div class="flex items-center gap-2 text-sm bg-white/10 px-3 py-1.5 rounded-full">
-        <span id="apiDot" class="h-2.5 w-2.5 rounded-full bg-amber-300 animate-pulse"></span>
-        <span id="apiStatus">Verbinde mit API …</span>
+      <div class="flex items-center gap-1.5 text-[11px] bg-white/10 px-2.5 py-1 rounded-full shrink-0">
+        <span id="apiDot" class="h-2 w-2 rounded-full bg-amber-300 animate-pulse"></span>
+        <span id="apiStatus">Verbinde …</span>
       </div>
     </div>
   </header>
 
-  <main class="max-w-6xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-5 gap-6">
+  <!-- Main input flow -->
+  <main id="inputFlow" class="max-w-md mx-auto px-4 py-4 space-y-4">
 
-    <!-- Left column: Inputs -->
-    <div class="lg:col-span-3 space-y-6">
+    <!-- Section A: Zeit -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="h-6 w-6 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center text-xs font-bold shrink-0">1</span>
+        <h2 class="text-base font-bold">Wie lange waren Sie in der Praxis?</h2>
+      </div>
 
-      <!-- Section A: Geofencing Simulator -->
-      <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-        <div class="flex items-center gap-2 mb-4">
-          <span class="h-7 w-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center text-sm font-bold">A</span>
-          <h2 class="text-lg font-bold">Geofencing-Simulator</h2>
-        </div>
-        <div class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-slate-600 mb-1">Praxis-Name</label>
-            <input id="praxisName" type="text" value="Praxis Dr. Mustermann"
-              class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none" />
-          </div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium text-slate-600 mb-1">Ankunft (Geofence)</label>
-              <input id="arrival" type="datetime-local"
-                class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-brand-500 outline-none" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-slate-600 mb-1">Abfahrt (Geofence)</label>
-              <input id="departure" type="datetime-local"
-                class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-brand-500 outline-none" />
-            </div>
-          </div>
-          <div class="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3 border border-slate-100">
-            <span class="text-sm text-slate-500">Simulierte Aufenthaltsdauer</span>
-            <span id="durationTicker" class="text-2xl font-extrabold text-brand-600 tabular-nums">– min</span>
-          </div>
-        </div>
-      </section>
+      <input id="praxisName" type="text" value="Praxis Dr. Mustermann"
+        class="w-full text-sm rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 mb-3 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
+        placeholder="Name der Praxis" />
 
-      <!-- Section B: Ziffern Selector -->
-      <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-        <div class="flex items-center gap-2 mb-1">
-          <span class="h-7 w-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center text-sm font-bold">B</span>
-          <h2 class="text-lg font-bold">Abgerechnete GOÄ-Ziffern</h2>
+      <div class="grid grid-cols-3 gap-2 mb-3">
+        <button type="button" class="quickTimeBtn min-h-[44px] rounded-xl bg-brand-50 text-brand-700 text-xs font-bold px-2 py-2 border border-brand-100 active:scale-95 transition" data-mins="15">Vor 15 Min<br/>da gewesen</button>
+        <button type="button" class="quickTimeBtn min-h-[44px] rounded-xl bg-brand-50 text-brand-700 text-xs font-bold px-2 py-2 border border-brand-100 active:scale-95 transition" data-mins="30">Vor 30 Min<br/>da gewesen</button>
+        <button type="button" class="quickTimeBtn min-h-[44px] rounded-xl bg-brand-50 text-brand-700 text-xs font-bold px-2 py-2 border border-brand-100 active:scale-95 transition" data-mins="45">Vor 45 Min<br/>da gewesen</button>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-500 mb-1">Ankunft</label>
+          <input id="arrival" type="time"
+            class="w-full text-lg font-semibold tabular-nums rounded-xl border border-slate-200 px-3 py-2.5 focus:ring-2 focus:ring-brand-500 outline-none" />
         </div>
-        <p class="text-sm text-slate-500 mb-4">Live aus dem Katalog geladen. Faktor je Ziffer anpassbar.</p>
-        <div id="zifferList" class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-500 mb-1">Abfahrt</label>
+          <input id="departure" type="time"
+            class="w-full text-lg font-semibold tabular-nums rounded-xl border border-slate-200 px-3 py-2.5 focus:ring-2 focus:ring-brand-500 outline-none" />
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3 mt-3 border border-slate-100">
+        <span class="text-sm text-slate-500">Aufenthaltsdauer</span>
+        <span id="durationTicker" class="text-2xl font-extrabold text-brand-600 tabular-nums">– min</span>
+      </div>
+    </section>
+
+    <!-- Section B: Rechnung erfassen -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="h-6 w-6 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center text-xs font-bold shrink-0">2</span>
+        <h2 class="text-base font-bold">Rechnung erfassen</h2>
+      </div>
+
+      <!-- Tabs -->
+      <div class="grid grid-cols-2 gap-2 mb-4 bg-slate-100 rounded-xl p-1">
+        <button id="tabBtnFoto" type="button" class="tabBtn min-h-[40px] rounded-lg text-sm font-bold transition">📷 Foto</button>
+        <button id="tabBtnManual" type="button" class="tabBtn min-h-[40px] rounded-lg text-sm font-bold transition">✍️ Manuell</button>
+      </div>
+
+      <!-- Foto tab -->
+      <div id="tabFoto" class="space-y-3">
+        <label for="cameraInput" class="flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-brand-300 rounded-2xl py-8 px-4 bg-brand-50/50 active:scale-[.98] transition cursor-pointer">
+          <span class="text-4xl">📷</span>
+          <span class="font-bold text-brand-700 text-sm">Rechnung fotografieren</span>
+          <span class="text-xs text-slate-500 text-center">Kamera öffnet sich automatisch &middot; JPEG, PNG oder PDF</span>
+        </label>
+        <input id="cameraInput" type="file" accept="image/*,application/pdf" capture="environment" class="hidden" />
+
+        <div id="photoPreviewWrap" class="hidden fade-in rounded-2xl border border-slate-200 p-3 flex items-center gap-3">
+          <img id="photoPreview" class="h-16 w-16 rounded-xl object-cover bg-slate-100 shrink-0" alt="Vorschau der fotografierten Rechnung" />
+          <div class="min-w-0 flex-1">
+            <div id="photoFileName" class="text-sm font-semibold truncate">rechnung.jpg</div>
+            <div id="photoStatus" class="text-xs text-emerald-600 font-medium">✅ Bereit zur Prüfung</div>
+          </div>
+          <button id="removePhotoBtn" type="button" class="h-9 w-9 shrink-0 rounded-full bg-slate-100 text-slate-500 font-bold active:scale-90 transition">✕</button>
+        </div>
+        <p class="text-[11px] text-slate-400 leading-snug px-1">
+          Hinweis: Die Texterkennung läuft serverseitig. Ist auf diesem Server keine OCR-Engine verfügbar,
+          können Sie die Ziffern jederzeit unter „✍️ Manuell” selbst auswählen.
+        </p>
+      </div>
+
+      <!-- Manual tab -->
+      <div id="tabManual" class="hidden space-y-3">
+        <p class="text-xs text-slate-500">Ziffer antippen zum Auswählen. Faktor &gt; 2,3 erfordert eine Begründung.</p>
+        <div id="zifferList" class="space-y-2.5">
           <div class="text-slate-400 text-sm py-6 text-center">Lade Katalog …</div>
         </div>
-      </section>
-    </div>
-
-    <!-- Right column: Verifier + Report -->
-    <div class="lg:col-span-2 space-y-6">
-      <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 sticky top-6">
-        <div class="flex items-center gap-2 mb-4">
-          <span class="h-7 w-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center text-sm font-bold">C</span>
-          <h2 class="text-lg font-bold">Verifizierung</h2>
-        </div>
-        <div class="bg-slate-50 rounded-xl p-4 mb-4 text-sm space-y-1 border border-slate-100">
-          <div class="flex justify-between"><span class="text-slate-500">Aufenthalt</span><span id="sumDuration" class="font-semibold tabular-nums">–</span></div>
-          <div class="flex justify-between"><span class="text-slate-500">Benötigte Behandlungszeit</span><span id="sumRequired" class="font-semibold tabular-nums">–</span></div>
-          <div class="flex justify-between"><span class="text-slate-500">Ausgewählte Ziffern</span><span id="sumCount" class="font-semibold tabular-nums">0</span></div>
-        </div>
-        <button id="verifyBtn"
-          class="w-full bg-brand-600 hover:bg-brand-700 active:scale-[.99] transition text-white font-bold text-lg rounded-xl py-3.5 shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
-          Abrechnung prüfen
-        </button>
-        <div id="report" class="mt-5"></div>
-      </section>
-    </div>
+      </div>
+    </section>
   </main>
 
-  <footer class="max-w-6xl mx-auto px-6 py-8 text-center text-xs text-slate-400">
-    Project VeriMed &middot; Demo-Simulator &middot; Keine Rechtsberatung
-  </footer>
+  <!-- Sticky bottom CTA -->
+  <div class="fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-slate-200 safe-bottom pt-3 px-4">
+    <div class="max-w-md mx-auto">
+      <button id="verifyBtn" disabled
+        class="w-full min-h-[56px] bg-brand-600 hover:bg-brand-700 active:scale-[.98] transition text-white font-extrabold text-base rounded-2xl shadow-lg shadow-brand-600/20 disabled:opacity-40 disabled:shadow-none flex items-center justify-center gap-2">
+        <span>✅ Abrechnung jetzt prüfen</span>
+        <span id="selCount" class="hidden bg-white/20 text-white text-xs font-bold rounded-full h-5 min-w-[20px] px-1.5 items-center justify-center">0</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Result overlay (mobile result dashboard) -->
+  <div id="resultOverlay" class="hidden fixed inset-0 z-50 bg-slate-50 overflow-y-auto">
+    <div class="safe-top sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-slate-100 px-4 py-3 flex items-center gap-3">
+      <button id="closeResultBtn" class="h-9 w-9 rounded-full bg-slate-100 text-slate-600 font-bold active:scale-90 transition shrink-0">←</button>
+      <h2 class="text-base font-bold">Prüfergebnis</h2>
+    </div>
+    <div id="resultContent" class="max-w-md mx-auto px-4 py-4 pb-10 space-y-4"></div>
+  </div>
 
   <script>
     const API = '/api/v1/claims';
     let catalog = [];
+    let activeTab = 'foto';
+    let attachedPhoto = null; // File
 
     const $ = (id) => document.getElementById(id);
 
-    // --- Defaults: heute 09:00 -> 09:12 ---
-    function initTimes() {
-      const d = new Date(); d.setSeconds(0,0); d.setHours(9,0);
-      const dep = new Date(d.getTime() + 12*60000);
-      $('arrival').value = toLocalInput(d);
-      $('departure').value = toLocalInput(dep);
+    // --- Time helpers ---
+    function fmtTime(d) { return d.toTimeString().slice(0, 5); }
+    function combineToday(timeStr) {
+      const [h, m] = timeStr.split(':').map(Number);
+      const d = new Date();
+      d.setHours(h, m, 0, 0);
+      return d;
     }
-    function toLocalInput(dt) {
-      const off = dt.getTimezoneOffset();
-      const local = new Date(dt.getTime() - off*60000);
-      return local.toISOString().slice(0,16);
+    function initTimes() {
+      $('arrival').value = '09:00';
+      $('departure').value = '09:12';
     }
     function durationMinutes() {
       const a = $('arrival').value, b = $('departure').value;
       if (!a || !b) return null;
-      const diff = (new Date(b) - new Date(a)) / 60000;
-      return diff;
+      return (combineToday(b) - combineToday(a)) / 60000;
     }
-
-    // --- Live ticker ---
     function updateTicker() {
       const m = durationMinutes();
       const t = $('durationTicker');
       if (m === null) { t.textContent = '– min'; t.className = 'text-2xl font-extrabold text-slate-400 tabular-nums'; }
       else if (m <= 0) { t.textContent = 'ungültig'; t.className = 'text-2xl font-extrabold text-red-500 tabular-nums'; }
       else { t.textContent = m.toFixed(0) + ' min'; t.className = 'text-2xl font-extrabold text-brand-600 tabular-nums'; }
-      $('sumDuration').textContent = (m && m > 0) ? m.toFixed(0)+' min' : '–';
-      updateRequired();
+      updateCTAState();
     }
+    document.querySelectorAll('.quickTimeBtn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const mins = parseInt(btn.dataset.mins, 10);
+        const now = new Date();
+        const arrival = new Date(now.getTime() - mins * 60000);
+        $('arrival').value = fmtTime(arrival);
+        $('departure').value = fmtTime(now);
+        updateTicker();
+      });
+    });
+    ['arrival', 'departure'].forEach(id => $(id).addEventListener('input', updateTicker));
 
-    function selectedItems() {
-      return catalog
-        .filter(z => $('chk_'+z.ziffer)?.checked)
-        .map(z => ({ ziffer: z.ziffer, multiplier: parseFloat($('mul_'+z.ziffer).value) || 1.0, rule_time: z.rule_time_minutes }));
+    // --- Tabs ---
+    function setTab(tab) {
+      activeTab = tab;
+      const fotoActive = tab === 'foto';
+      $('tabFoto').classList.toggle('hidden', !fotoActive);
+      $('tabManual').classList.toggle('hidden', fotoActive);
+      $('tabBtnFoto').className = 'tabBtn min-h-[40px] rounded-lg text-sm font-bold transition ' + (fotoActive ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500');
+      $('tabBtnManual').className = 'tabBtn min-h-[40px] rounded-lg text-sm font-bold transition ' + (!fotoActive ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500');
+      updateCTAState();
     }
-    function updateRequired() {
-      const items = selectedItems();
-      const req = items.reduce((s,i)=> s + (i.rule_time||0), 0);
-      $('sumRequired').textContent = items.length ? req+' min' : '–';
-      $('sumCount').textContent = items.length;
-    }
+    $('tabBtnFoto').addEventListener('click', () => setTab('foto'));
+    $('tabBtnManual').addEventListener('click', () => setTab('manual'));
 
     // --- API health ---
     async function checkHealth() {
       try {
-        const r = await fetch('/health'); const j = await r.json();
-        $('apiStatus').textContent = 'API verbunden';
-        $('apiDot').className = 'h-2.5 w-2.5 rounded-full bg-emerald-300';
+        const r = await fetch('/health'); await r.json();
+        $('apiStatus').textContent = 'Verbunden';
+        $('apiDot').className = 'h-2 w-2 rounded-full bg-emerald-300';
       } catch {
-        $('apiStatus').textContent = 'API nicht erreichbar';
-        $('apiDot').className = 'h-2.5 w-2.5 rounded-full bg-red-400';
+        $('apiStatus').textContent = 'Offline';
+        $('apiDot').className = 'h-2 w-2 rounded-full bg-red-400';
       }
     }
 
-    // --- Load catalog ---
+    // --- Load catalog (manual tab) ---
+    const PRESET_FACTORS = [1.0, 1.8, 2.3, 3.5];
+
     async function loadCatalog() {
       const list = $('zifferList');
       try {
         const r = await fetch(API + '/catalog');
-        if (!r.ok) throw new Error('HTTP '+r.status);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
         catalog = await r.json();
         if (!catalog.length) { list.innerHTML = '<div class="text-slate-400 text-sm py-6 text-center">Katalog ist leer.</div>'; return; }
-        list.innerHTML = catalog.map(z => `
-          <label class="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-brand-400 hover:bg-brand-50/40 transition cursor-pointer">
-            <input id="chk_${z.ziffer}" type="checkbox" class="h-5 w-5 rounded text-brand-600 focus:ring-brand-500" onchange="updateRequired()" />
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2">
-                <span class="text-xs font-bold bg-slate-800 text-white px-2 py-0.5 rounded">Ziffer ${z.ziffer}</span>
-                <span class="text-xs text-slate-400">${z.rule_time_minutes} min</span>
-              </div>
-              <div class="text-sm font-medium text-slate-700 truncate mt-1">${z.title_patient}</div>
-              <div class="text-xs text-slate-400 truncate">${z.title_official}</div>
-            </div>
-            <div class="text-right">
-              <label class="block text-[10px] text-slate-400 uppercase tracking-wide">Faktor</label>
-              <input id="mul_${z.ziffer}" type="number" step="0.1" min="0.1" value="2.3"
-                class="w-20 text-right rounded-lg border border-slate-300 px-2 py-1 text-sm focus:ring-2 focus:ring-brand-500 outline-none"
-                onchange="updateRequired()" />
-            </div>
-          </label>
-        `).join('');
-        updateRequired();
+        list.innerHTML = catalog.map(z => renderZifferCard(z)).join('');
+        catalog.forEach(z => {
+          $('mul_' + z.ziffer).addEventListener('input', () => onMultiplierChange(z.ziffer));
+        });
+        updateCTAState();
       } catch (e) {
         list.innerHTML = `<div class="text-red-500 text-sm py-6 text-center">Katalog konnte nicht geladen werden (${e.message}).</div>`;
       }
     }
 
-    // --- Verify ---
-    async function verify() {
-      const btn = $('verifyBtn');
-      const report = $('report');
-      const items = selectedItems();
+    function renderZifferCard(z) {
+      return `
+        <div id="card_${z.ziffer}" class="rounded-2xl border-2 border-slate-200 overflow-hidden transition">
+          <label class="flex items-center gap-3 p-3 active:bg-slate-50 cursor-pointer">
+            <input id="chk_${z.ziffer}" type="checkbox" class="h-5 w-5 rounded text-brand-600 focus:ring-brand-500 shrink-0" onchange="onToggleZiffer('${z.ziffer}')" />
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-xs font-bold bg-slate-800 text-white px-2 py-0.5 rounded">Ziffer ${z.ziffer}</span>
+                <span class="text-xs text-slate-400">${z.rule_time_minutes} min</span>
+              </div>
+              <div class="text-sm font-semibold text-slate-700 mt-1">${z.title_patient}</div>
+            </div>
+          </label>
+          <details class="border-t border-slate-100 px-3 py-2">
+            <summary class="text-xs text-slate-400 select-none">Offizieller Leistungstext</summary>
+            <p class="text-xs text-slate-500 mt-1">${z.title_official}</p>
+          </details>
+          <div class="border-t border-slate-100 px-3 py-3 bg-slate-50/60">
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Steigerungsfaktor</span>
+              <input id="mul_${z.ziffer}" type="number" step="0.1" min="0.1" value="2.3"
+                class="w-20 text-right rounded-lg border border-slate-300 px-2 py-1.5 text-sm font-bold focus:ring-2 focus:ring-brand-500 outline-none" />
+            </div>
+            <div class="flex gap-1.5 flex-wrap">
+              ${PRESET_FACTORS.map(f => `<button type="button" class="factorPresetBtn text-xs font-bold px-2.5 py-1 rounded-full bg-white border border-slate-200 active:scale-95 transition" onclick="setPresetFactor('${z.ziffer}', ${f})">${f.toFixed(1)}×</button>`).join('')}
+            </div>
+            <div id="justWrap_${z.ziffer}" class="hidden mt-2.5">
+              <label class="text-[11px] font-bold text-red-600 flex items-center gap-1 mb-1">⚠️ Medizinische Begründung erforderlich</label>
+              <textarea id="just_${z.ziffer}" rows="2" placeholder="z.B. besonders schwieriger / zeitaufwändiger Behandlungsverlauf …"
+                class="w-full text-sm rounded-lg border border-red-200 bg-red-50/50 px-2.5 py-2 focus:ring-2 focus:ring-red-400 outline-none"
+                oninput="updateCTAState()"></textarea>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function onToggleZiffer(ziffer) {
+      const checked = $('chk_' + ziffer).checked;
+      $('card_' + ziffer).className = 'rounded-2xl border-2 overflow-hidden transition ' + (checked ? 'border-brand-400 bg-brand-50/30' : 'border-slate-200');
+      updateCTAState();
+    }
+    function setPresetFactor(ziffer, value) {
+      $('mul_' + ziffer).value = value;
+      onMultiplierChange(ziffer);
+    }
+    function onMultiplierChange(ziffer) {
+      const val = parseFloat($('mul_' + ziffer).value) || 0;
+      $('justWrap_' + ziffer).classList.toggle('hidden', val <= 2.3);
+      updateCTAState();
+    }
+
+    function selectedManualItems() {
+      return catalog
+        .filter(z => $('chk_' + z.ziffer)?.checked)
+        .map(z => ({
+          ziffer: z.ziffer,
+          multiplier: parseFloat($('mul_' + z.ziffer).value) || 1.0,
+          justification: $('just_' + z.ziffer)?.value?.trim() || null,
+        }));
+    }
+
+    // --- Photo capture ---
+    $('cameraInput').addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      attachedPhoto = file;
+      $('photoFileName').textContent = file.name || 'Rechnung';
+      $('photoStatus').textContent = '✅ Bereit zur Prüfung';
+      $('photoStatus').className = 'text-xs text-emerald-600 font-medium';
+      if (file.type.startsWith('image/')) {
+        $('photoPreview').src = URL.createObjectURL(file);
+      } else {
+        $('photoPreview').removeAttribute('src');
+      }
+      $('photoPreviewWrap').classList.remove('hidden');
+      updateCTAState();
+    });
+    $('removePhotoBtn').addEventListener('click', () => {
+      attachedPhoto = null;
+      $('cameraInput').value = '';
+      $('photoPreviewWrap').classList.add('hidden');
+      updateCTAState();
+    });
+
+    // --- Sticky CTA state ---
+    function updateCTAState() {
       const dur = durationMinutes();
+      const validDuration = dur !== null && dur > 0;
+      const manualCount = selectedManualItems().length;
+      const ready = validDuration && (attachedPhoto !== null || manualCount > 0);
 
-      if (!items.length) { report.innerHTML = warnBox('Bitte mindestens eine Ziffer auswählen.'); return; }
-      if (dur === null || dur <= 0) { report.innerHTML = warnBox('Bitte gültige Geofence-Zeiten angeben (Abfahrt nach Ankunft).'); return; }
+      $('verifyBtn').disabled = !ready;
+      const badge = $('selCount');
+      if (activeTab === 'manual' && manualCount > 0) {
+        badge.textContent = manualCount;
+        badge.classList.remove('hidden');
+        badge.classList.add('flex');
+      } else {
+        badge.classList.add('hidden');
+        badge.classList.remove('flex');
+      }
+    }
 
+    // --- Verify (unified CTA) ---
+    $('verifyBtn').addEventListener('click', async () => {
+      const dur = durationMinutes();
+      if (dur === null || dur <= 0) return;
+
+      if (attachedPhoto) {
+        await runParseAndValidate();
+      } else {
+        await runManualValidate();
+      }
+    });
+
+    function setBtnLoading(loading) {
+      const btn = $('verifyBtn');
+      btn.disabled = loading;
+      btn.querySelector('span').textContent = loading ? '⏳ Prüfe …' : '✅ Abrechnung jetzt prüfen';
+    }
+
+    async function runManualValidate() {
+      const items = selectedManualItems();
       const payload = {
-        patient_id: 'sim-' + Date.now(),
+        patient_id: 'mobil-' + Date.now(),
         praxis_name: $('praxisName').value || 'Unbenannte Praxis',
-        geofence_arrival: new Date($('arrival').value).toISOString(),
-        geofence_departure: new Date($('departure').value).toISOString(),
+        geofence_arrival: combineToday($('arrival').value).toISOString(),
+        geofence_departure: combineToday($('departure').value).toISOString(),
         total_billed_amount: 0,
-        billed_ziffern: items.map(i => ({ ziffer: i.ziffer, multiplier: i.multiplier })),
+        billed_ziffern: items.map(i => ({ ziffer: i.ziffer, multiplier: i.multiplier, justification: i.justification })),
       };
-
-      btn.disabled = true; btn.textContent = 'Prüfe …';
+      setBtnLoading(true);
       try {
         const r = await fetch(API + '/validate', {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
         });
         const data = await r.json();
-        if (!r.ok) throw new Error(data.detail || ('HTTP '+r.status));
-        renderReport(data);
+        if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : ('HTTP ' + r.status));
+        showResult(data);
       } catch (e) {
-        report.innerHTML = warnBox('Fehler bei der Prüfung: ' + e.message);
+        alert('Fehler bei der Prüfung: ' + e.message);
       } finally {
-        btn.disabled = false; btn.textContent = 'Abrechnung prüfen';
+        setBtnLoading(false);
+        updateCTAState();
       }
     }
 
-    function warnBox(msg) {
-      return `<div class="fade-in rounded-xl bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 text-sm">${msg}</div>`;
+    async function runParseAndValidate() {
+      const form = new FormData();
+      form.append('geofence_arrival', combineToday($('arrival').value).toISOString());
+      form.append('geofence_departure', combineToday($('departure').value).toISOString());
+      form.append('patient_id', 'mobil-' + Date.now());
+      form.append('praxis_name', $('praxisName').value || 'Unbenannte Praxis');
+      form.append('total_billed_amount', '0');
+      form.append('file', attachedPhoto);
+
+      setBtnLoading(true);
+      try {
+        const r = await fetch(API + '/parse-and-validate', { method: 'POST', body: form });
+        const data = await r.json();
+        if (!r.ok) {
+          const detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
+          throw new Error(detail || ('HTTP ' + r.status));
+        }
+        showResult(data.report, data.parsed_ziffern);
+      } catch (e) {
+        alert('Foto konnte nicht ausgewertet werden:\n' + e.message + '\n\nBitte alternativ „✍️ Manuell” nutzen.');
+        setTab('manual');
+      } finally {
+        setBtnLoading(false);
+        updateCTAState();
+      }
     }
 
-    function renderReport(data) {
+    // --- Result rendering ---
+    const ANOMALY_META = {
+      time_anomaly: { icon: '⏱️', label: 'Zeit-Konflikt' },
+      exclusion_anomaly: { icon: '🚫', label: 'Ausschluss-Konflikt' },
+      multiplier_anomaly: { icon: '🧾', label: 'Unbegründeter Höchstsatz' },
+      unknown_ziffer: { icon: '❓', label: 'Unbekannte Ziffer' },
+    };
+
+    function showResult(report, parsedZiffern) {
+      $('resultContent').innerHTML = renderResultHtml(report, parsedZiffern);
+      $('resultOverlay').classList.remove('hidden');
+      $('resultOverlay').scrollTop = 0;
+      document.body.style.overflow = 'hidden';
+    }
+    $('closeResultBtn').addEventListener('click', () => {
+      $('resultOverlay').classList.add('hidden');
+      document.body.style.overflow = '';
+    });
+
+    function renderResultHtml(data, parsedZiffern) {
       const clean = data.status === 'processed_clean';
       const anomalies = data.anomalies || [];
 
       const head = clean
         ? `<div class="fade-in rounded-2xl bg-emerald-50 border-2 border-emerald-300 p-5 text-center">
              <div class="text-5xl mb-2">✅</div>
-             <div class="text-xl font-extrabold text-emerald-700">Rechnung fehlerfrei</div>
+             <div class="text-lg font-extrabold text-emerald-700">Rechnung fehlerfrei</div>
              <div class="text-sm text-emerald-600 mt-1">Keine Auffälligkeiten festgestellt.</div>
            </div>`
         : `<div class="fade-in rounded-2xl bg-red-50 border-2 border-red-300 p-5 text-center">
              <div class="text-5xl mb-2">⚠️</div>
-             <div class="text-xl font-extrabold text-red-700">Auffälligkeiten gefunden</div>
+             <div class="text-lg font-extrabold text-red-700">Auffälligkeiten gefunden</div>
              <div class="text-sm text-red-600 mt-1">${anomalies.length} Hinweis(e) zur Prüfung.</div>
            </div>`;
 
       const metrics = `
-        <div class="grid grid-cols-2 gap-3 mt-4 text-sm">
-          <div class="bg-slate-50 rounded-lg p-3 border border-slate-100">
+        <div class="grid grid-cols-2 gap-3 text-sm">
+          <div class="bg-white rounded-xl p-3 border border-slate-100">
             <div class="text-slate-400 text-xs">Aufenthalt</div>
-            <div class="font-bold tabular-nums">${data.actual_duration_minutes} min</div>
+            <div class="font-bold tabular-nums text-lg">${data.actual_duration_minutes} min</div>
           </div>
-          <div class="bg-slate-50 rounded-lg p-3 border border-slate-100">
-            <div class="text-slate-400 text-xs">Benötigt (inkl. ${data.time_tolerance_minutes} min Toleranz)</div>
-            <div class="font-bold tabular-nums">${data.required_treatment_time_minutes} min</div>
+          <div class="bg-white rounded-xl p-3 border border-slate-100">
+            <div class="text-slate-400 text-xs">Benötigt (+${data.time_tolerance_minutes} min Toleranz)</div>
+            <div class="font-bold tabular-nums text-lg">${data.required_treatment_time_minutes} min</div>
           </div>
         </div>`;
 
-      const iconFor = (t) => t === 'time_anomaly' ? '⏱️' : (t === 'exclusion_anomaly' ? '🚫' : '❓');
-      const labelFor = (t) => t === 'time_anomaly' ? 'Zeit-Konflikt' : (t === 'exclusion_anomaly' ? 'Ausschluss-Konflikt' : 'Unbekannte Ziffer');
+      const scannedNote = parsedZiffern
+        ? `<div class="text-xs text-slate-400 px-1">📷 ${parsedZiffern.length} Ziffer(n) automatisch aus dem Foto erkannt.</div>`
+        : '';
 
       const anomalyHtml = anomalies.length ? `
-        <div class="mt-4 space-y-2">
-          ${anomalies.map(a => `
-            <div class="rounded-xl border ${a.severity==='critical'?'border-red-200 bg-red-50':'border-amber-200 bg-amber-50'} p-3">
+        <div class="space-y-2">
+          ${anomalies.map(a => {
+            const meta = ANOMALY_META[a.type] || { icon: 'ℹ️', label: a.type };
+            const critical = a.severity === 'critical';
+            return `
+            <div class="fade-in rounded-2xl border-2 ${critical ? 'border-red-300 bg-red-50' : 'border-amber-200 bg-amber-50'} p-4">
               <div class="flex items-center gap-2 mb-1">
-                <span>${iconFor(a.type)}</span>
-                <span class="font-bold text-sm ${a.severity==='critical'?'text-red-700':'text-amber-700'}">${labelFor(a.type)}</span>
-                ${a.related_ziffern?.length ? `<span class="text-xs text-slate-500">(${a.related_ziffern.map(z=>'Ziffer '+z).join(', ')})</span>` : ''}
+                <span class="text-lg">${meta.icon}</span>
+                <span class="font-bold text-sm ${critical ? 'text-red-700' : 'text-amber-700'}">${meta.label}</span>
+                ${a.related_ziffern?.length ? `<span class="text-[11px] text-slate-500 ml-auto">${a.related_ziffern.map(z => 'Ziffer ' + z).join(', ')}</span>` : ''}
               </div>
-              <p class="text-sm text-slate-600">${a.message}</p>
-            </div>`).join('')}
+              <p class="text-sm text-slate-600 leading-snug">${a.message}</p>
+            </div>`;
+          }).join('')}
         </div>` : '';
 
       const details = `
-        <div class="mt-5">
-          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Geprüfte Ziffern</div>
-          <div class="space-y-1.5">
-            ${(data.ziffer_details||[]).map(d => `
-              <div class="flex items-center gap-2 text-sm">
-                <span class="text-xs font-bold ${d.known?'bg-slate-800':'bg-amber-500'} text-white px-2 py-0.5 rounded">${d.ziffer}</span>
-                <span class="flex-1 text-slate-600 truncate">${d.title_patient || 'Im Katalog nicht gefunden'}</span>
-                <span class="text-xs text-slate-400">×${d.multiplier}</span>
-              </div>`).join('')}
+        <div>
+          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2 px-1">Geprüfte Ziffern &middot; antippen für Details</div>
+          <div class="space-y-2">
+            ${(data.ziffer_details || []).map(d => renderZifferAccordion(d, anomalies)).join('')}
           </div>
         </div>`;
 
-      $('report').innerHTML = head + metrics + anomalyHtml + details;
+      const resetBtn = `
+        <button onclick="resetFlow()" class="w-full min-h-[48px] rounded-2xl bg-slate-800 text-white font-bold text-sm active:scale-[.98] transition mt-2">
+          🔄 Neue Prüfung starten
+        </button>`;
+
+      return head + scannedNote + metrics + anomalyHtml + details + resetBtn;
     }
 
-    // --- Wire up ---
-    ['arrival','departure'].forEach(id => $(id).addEventListener('input', updateTicker));
-    $('verifyBtn').addEventListener('click', verify);
+    function renderZifferAccordion(d, anomalies) {
+      const flagged = anomalies.some(a => a.type === 'multiplier_anomaly' && a.related_ziffern?.includes(d.ziffer));
+      const factorBadge = flagged
+        ? `<span class="text-xs font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded-full">×${d.multiplier} ⚠️</span>`
+        : `<span class="text-xs font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">×${d.multiplier}</span>`;
+      return `
+        <details class="fade-in rounded-2xl border border-slate-200 bg-white overflow-hidden">
+          <summary class="flex items-center gap-2 p-3 cursor-pointer select-none list-none">
+            <span class="text-xs font-bold ${d.known ? 'bg-slate-800' : 'bg-amber-500'} text-white px-2 py-0.5 rounded shrink-0">${d.ziffer}</span>
+            <span class="flex-1 text-sm font-medium text-slate-700 truncate">${d.title_patient || 'Im Katalog nicht gefunden'}</span>
+            ${factorBadge}
+          </summary>
+          <div class="px-3 pb-3 pt-1 border-t border-slate-100 space-y-1.5">
+            <p class="text-xs text-slate-500">${d.title_official || 'Keine offizielle Beschreibung verfügbar.'}</p>
+            ${d.rule_time_minutes != null ? `<p class="text-xs text-slate-400">Regelzeit: ${d.rule_time_minutes} min</p>` : ''}
+            ${d.justification
+              ? `<p class="text-xs bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-2 text-slate-600"><span class="font-semibold">Begründung:</span> ${d.justification}</p>`
+              : (flagged ? `<p class="text-xs bg-red-50 border border-red-100 rounded-lg px-2.5 py-2 text-red-600 font-medium">Keine Begründung angegeben.</p>` : '')}
+          </div>
+        </details>`;
+    }
 
+    function resetFlow() {
+      $('resultOverlay').classList.add('hidden');
+      document.body.style.overflow = '';
+      attachedPhoto = null;
+      $('cameraInput').value = '';
+      $('photoPreviewWrap').classList.add('hidden');
+      catalog.forEach(z => {
+        const chk = $('chk_' + z.ziffer);
+        if (chk) { chk.checked = false; onToggleZiffer(z.ziffer); }
+      });
+      setTab('foto');
+      updateCTAState();
+    }
+
+    // --- Init ---
     initTimes();
+    setTab('foto');
     updateTicker();
     checkHealth();
     loadCatalog();
-    setInterval(updateTicker, 1000); // live ticker
   </script>
 </body>
 </html>

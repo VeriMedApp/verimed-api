@@ -14,7 +14,15 @@ class BilledZiffer(BaseModel):
 
     ziffer: str = Field(..., description="GOAE-Ziffer, z.B. '1'.")
     multiplier: float = Field(
-        1.0, gt=0, description="Steigerungsfaktor, z.B. 2.3 oder 3.5."
+        2.3, gt=0, description="Steigerungsfaktor, z.B. 1.0, 2.3 oder 3.5."
+    )
+    justification: str | None = Field(
+        None,
+        description=(
+            "Schriftliche medizinische Begruendung fuer einen erhoehten "
+            "Steigerungsfaktor (> 2,3-fach), wie sie auf der Rechnung "
+            "vermerkt sein muss."
+        ),
     )
 
 
@@ -48,6 +56,7 @@ class AnomalyType(str, enum.Enum):
     TIME = "time_anomaly"
     EXCLUSION = "exclusion_anomaly"
     UNKNOWN_ZIFFER = "unknown_ziffer"
+    MULTIPLIER = "multiplier_anomaly"
 
 
 class Anomaly(BaseModel):
@@ -64,6 +73,7 @@ class ZifferReport(BaseModel):
 
     ziffer: str
     multiplier: float
+    justification: str | None = None
     title_patient: str | None = None
     title_official: str | None = None
     rule_time_minutes: int | None = None
@@ -94,3 +104,17 @@ class ClaimValidationReport(BaseModel):
 
     anomalies: list[Anomaly] = Field(default_factory=list)
     ziffer_details: list[ZifferReport] = Field(default_factory=list)
+
+
+# --- OCR-Upload-Antwort -------------------------------------------------------
+class ParseAndValidateResponse(BaseModel):
+    """Antwort des OCR-Upload-Endpunkts: erkannte Ziffern + Validierungsbericht."""
+
+    parsed_ziffern: list[BilledZiffer] = Field(
+        default_factory=list,
+        description="Aus dem Foto/PDF automatisch erkannte, abgerechnete Ziffern.",
+    )
+    raw_text_excerpt: str | None = Field(
+        None, description="Ausschnitt des per OCR/Textextraktion erkannten Rohtexts."
+    )
+    report: ClaimValidationReport

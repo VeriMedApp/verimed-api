@@ -21,12 +21,16 @@ from app.models.goa import GOAZiffer
 from app.schemas.claim import (
     Anomaly,
     AnomalyType,
+    BilledZiffer,
     ClaimValidationReport,
     ClaimValidationRequest,
     ZifferReport,
 )
 
 logger = logging.getLogger(__name__)
+
+# GOAE-Regelhoechstsatz ohne gesonderte Begruendung (§ 5 Abs. 2 GOAE).
+MAX_MULTIPLIER_WITHOUT_JUSTIFICATION = 2.3
 
 
 class ClaimValidator:
@@ -74,6 +78,8 @@ class ClaimValidator:
         # --- Detailliste + unbekannte Ziffern aufbauen ----------------------
         required_treatment_time = 0.0
         for item in request.billed_ziffern:
+            anomalies.extend(self._check_multiplier_justification(item))
+
             entry = catalog.get(item.ziffer)
             if entry is None:
                 anomalies.append(
@@ -92,6 +98,7 @@ class ClaimValidator:
                     ZifferReport(
                         ziffer=item.ziffer,
                         multiplier=item.multiplier,
+                        justification=item.justification,
                         known=False,
                     )
                 )
@@ -102,6 +109,7 @@ class ClaimValidator:
                 ZifferReport(
                     ziffer=entry.ziffer,
                     multiplier=item.multiplier,
+                    justification=item.justification,
                     title_patient=entry.title_patient,
                     title_official=entry.title_official,
                     rule_time_minutes=entry.rule_time_minutes,
@@ -121,7 +129,8 @@ class ClaimValidator:
         anomalies.extend(self._check_exclusions(billed_ziffern, catalog))
 
         is_valid = not any(
-            a.type in (AnomalyType.TIME, AnomalyType.EXCLUSION) for a in anomalies
+            a.type in (AnomalyType.TIME, AnomalyType.EXCLUSION, AnomalyType.MULTIPLIER)
+            for a in anomalies
         )
         status = (
             ClaimStatus.PROCESSED_CLEAN
@@ -175,6 +184,31 @@ class ClaimValidator:
                         f"(Toleranz {self._tolerance} Min.). Die abgerechnete "
                         "Behandlungszeit erscheint nicht plausibel."
                     ),
+                )
+            )
+        return anomalies
+
+    @staticmethod
+    def _check_multiplier_justification(item: BilledZiffer) -> list[Anomaly]:
+        """Markiert eine Anomalie, wenn ein erhoehter Faktor unbegruendet bleibt.
+
+        Nach § 5 Abs. 2 GOAE ist eine Ueberschreitung des 2,3-fachen
+        Steigerungsfaktors (z.B. 3,5-fach) nur mit einer auf der Rechnung
+        vermerkten, schriftlichen medizinischen Begruendung zulaessig.
+        """
+        anomalies: list[Anomaly] = []
+        if item.multiplier > MAX_MULTIPLIER_WITHOUT_JUSTIFICATION and not (
+            item.justification and item.justification.strip()
+        ):
+            anomalies.append(
+                Anomaly(
+                    type=AnomalyType.MULTIPLIER,
+                    severity="critical",
+                    message=(
+                        f"Höchstsatz (Faktor {item.multiplier:g}) ohne "
+                        "erforderliche medizinische Begründung abgerechnet."
+                    ),
+                    related_ziffern=[item.ziffer],
                 )
             )
         return anomalies

@@ -13,6 +13,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -80,7 +81,9 @@ class ClaimLineItem(Base):
     ziffer: Mapped[str] = mapped_column(
         String(16), ForeignKey("goa_ziffern.ziffer"), nullable=False
     )
-    multiplier: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    multiplier: Mapped[float] = mapped_column(Float, nullable=False, default=2.3)
+    # Schriftliche Begruendung fuer Steigerungsfaktoren > 2,3 (GOAE-Pflichtangabe).
+    justification: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     claim: Mapped["MedicalClaim"] = relationship(back_populates="line_items")
 
