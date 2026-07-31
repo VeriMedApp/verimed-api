@@ -83,6 +83,20 @@ _ZIFFER_PATTERN = re.compile(
     r"(?:Ziffer|Ziff\.?|GO[ÄA]E?|Nr\.?)\s*[:.\-]?\s*(\d{1,4})",
     re.IGNORECASE,
 )
+# Rechnungs-/Belegnummern wie "GOÄ-2026-101" oder "2026-101" (Rechnungsdatum/
+# Referenznummer) duerfen nicht als abgerechnete Ziffer interpretiert werden.
+# Diese Muster werden vor der eigentlichen Ziffer-Extraktion aus dem Text
+# entfernt, damit z.B. "GOÄ-2026-101" nicht als "Ziffer 2026" erkannt wird.
+_INVOICE_REFERENCE_PATTERN = re.compile(
+    r"\b(?:GO[ÄA]E?-)?20(?:2[0-9]|3[0-5])-\d{1,6}\b",
+    re.IGNORECASE,
+)
+# Zusaetzliche Absicherung: Jahreszahlen (z.B. aus Rechnungsdatum/-nummer)
+# sind niemals eine gueltige GOAE-Ziffer und werden auch dann verworfen, wenn
+# sie (z.B. durch OCR-Rauschen) direkt hinter einem Ziffer-Schluesselwort
+# stehen.
+_ZIFFER_YEAR_MIN = 2020
+_ZIFFER_YEAR_MAX = 2035
 # Erkennt z.B. "2,3-fach", "3,5-fach", "2.3fach", "3,5x".
 _MULTIPLIER_FACH_PATTERN = re.compile(
     r"(\d+(?:[.,]\d+)?)\s*[-\s]?(?:fach|x)\b",
@@ -103,6 +117,11 @@ _JUSTIFICATION_PATTERN = re.compile(
 def _to_float(raw: str) -> float:
     """Wandelt eine erkannte Zahl (deutsches oder englisches Format) in float."""
     return float(raw.replace(",", "."))
+
+
+def _looks_like_year(raw: str) -> bool:
+    """True, wenn der erkannte Zahlenwert eher eine Jahreszahl als eine Ziffer ist."""
+    return raw.isdigit() and _ZIFFER_YEAR_MIN <= int(raw) <= _ZIFFER_YEAR_MAX
 
 
 def _guess_suffix(filename: str | None) -> str:
@@ -180,17 +199,23 @@ def _extract_text_from_image(data: bytes) -> str:
 
 def parse_invoice_text(text: str) -> ParsedInvoice:
     """Extrahiert GOAE-Ziffern, Steigerungsfaktoren und Begruendung aus Text."""
-    justification_match = _JUSTIFICATION_PATTERN.search(text)
+    # Rechnungs-/Belegnummern (z.B. "GOÄ-2026-101", "2026-101") vorab entfernen,
+    # damit sie unten nicht faelschlich als Ziffer erkannt werden.
+    sanitized_text = _INVOICE_REFERENCE_PATTERN.sub(" ", text)
+
+    justification_match = _JUSTIFICATION_PATTERN.search(sanitized_text)
     justification = (
         justification_match.group(1).strip() if justification_match else None
     )
 
     ziffern: list[ParsedZiffer] = []
     seen: set[str] = set()
-    for line in text.splitlines():
+    for line in sanitized_text.splitlines():
         for ziffer_match in _ZIFFER_PATTERN.finditer(line):
             ziffer = ziffer_match.group(1)
             if ziffer in seen:
+                continue
+            if _looks_like_year(ziffer):
                 continue
 
             multiplier = DEFAULT_MULTIPLIER

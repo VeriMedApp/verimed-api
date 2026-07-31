@@ -306,20 +306,89 @@
         }));
     }
 
+    // --- Client-seitiges Verkleinern (verhindert Timeouts bei 12MP+ Kamerafotos) ---
+    const MAX_UPLOAD_DIMENSION = 1600;
+    const UPLOAD_JPEG_QUALITY = 0.8;
+
+    async function loadDrawableSource(file) {
+      if (window.createImageBitmap) {
+        try {
+          const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+          return { el: bitmap, width: bitmap.width, height: bitmap.height, close: () => bitmap.close() };
+        } catch {
+          // Manche Browser/Formate (z.B. HEIC) unterstuetzen createImageBitmap-Optionen nicht -> Fallback.
+        }
+      }
+      const url = URL.createObjectURL(file);
+      try {
+        const img = await new Promise((resolve, reject) => {
+          const im = new Image();
+          im.onload = () => resolve(im);
+          im.onerror = () => reject(new Error('Bild konnte nicht geladen werden.'));
+          im.src = url;
+        });
+        return { el: img, width: img.naturalWidth, height: img.naturalHeight, close: () => URL.revokeObjectURL(url) };
+      } catch (e) {
+        URL.revokeObjectURL(url);
+        throw e;
+      }
+    }
+
+    async function resizeImageForUpload(file, maxDim = MAX_UPLOAD_DIMENSION, quality = UPLOAD_JPEG_QUALITY) {
+      const source = await loadDrawableSource(file);
+      let targetW = source.width, targetH = source.height;
+      if (targetW > maxDim || targetH > maxDim) {
+        const scale = Math.min(maxDim / targetW, maxDim / targetH);
+        targetW = Math.max(1, Math.round(targetW * scale));
+        targetH = Math.max(1, Math.round(targetH * scale));
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = targetW;
+      canvas.height = targetH;
+      canvas.getContext('2d').drawImage(source.el, 0, 0, targetW, targetH);
+      if (source.close) source.close();
+
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Bild konnte nicht komprimiert werden.'))), 'image/jpeg', quality);
+      });
+
+      const baseName = (file.name || 'rechnung').replace(/\.[a-zA-Z0-9]+$/, '');
+      return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' });
+    }
+
     // --- Photo capture ---
-    $('cameraInput').addEventListener('change', (e) => {
+    $('cameraInput').addEventListener('change', async (e) => {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
-      attachedPhoto = file;
+
       $('photoFileName').textContent = file.name || 'Rechnung';
-      $('photoStatus').textContent = '✅ Bereit zur Prüfung';
-      $('photoStatus').className = 'text-xs text-emerald-600 font-medium';
+      $('photoPreviewWrap').classList.remove('hidden');
+
+      let uploadFile = file;
       if (file.type.startsWith('image/')) {
-        $('photoPreview').src = URL.createObjectURL(file);
+        $('photoStatus').textContent = '🗜️ Bild wird optimiert …';
+        $('photoStatus').className = 'text-xs text-slate-500 font-medium';
+        try {
+          uploadFile = await resizeImageForUpload(file);
+        } catch (err) {
+          console.warn('Bildverkleinerung fehlgeschlagen, sende Originaldatei:', err);
+          uploadFile = file;
+        }
+      }
+
+      attachedPhoto = uploadFile;
+      const kb = (n) => (n / 1024).toFixed(0) + ' KB';
+      $('photoStatus').textContent = (uploadFile !== file)
+        ? `✅ Bereit zur Prüfung · ${kb(uploadFile.size)} (Original ${kb(file.size)})`
+        : '✅ Bereit zur Prüfung';
+      $('photoStatus').className = 'text-xs text-emerald-600 font-medium';
+
+      if (uploadFile.type.startsWith('image/')) {
+        $('photoPreview').src = URL.createObjectURL(uploadFile);
       } else {
         $('photoPreview').removeAttribute('src');
       }
-      $('photoPreviewWrap').classList.remove('hidden');
       updateCTAState();
     });
     $('removePhotoBtn').addEventListener('click', () => {
