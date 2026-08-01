@@ -38,7 +38,22 @@
   <header class="safe-top sticky top-0 z-30 bg-gradient-to-r from-brand-700 via-brand-600 to-brand-500 text-white shadow-lg">
     <div class="max-w-md mx-auto px-4 pb-4 flex items-center justify-between gap-3">
       <div class="flex items-center gap-2.5">
-        <div class="h-10 w-10 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center text-xl shrink-0">🩺</div>
+        <div class="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 shadow-md flex items-center justify-center shrink-0 relative overflow-hidden">
+          <svg class="absolute inset-0 w-full h-full opacity-30" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+            <circle cx="46" cy="42" r="7" stroke="white" stroke-width="0.75"/>
+            <circle cx="46" cy="42" r="13" stroke="white" stroke-width="0.75"/>
+            <circle cx="46" cy="42" r="19" stroke="white" stroke-width="0.75"/>
+            <path d="M0 16h64M0 32h64M0 48h64" stroke="white" stroke-width="0.4"/>
+            <path d="M16 0v64M32 0v64M48 0v64" stroke="white" stroke-width="0.4"/>
+          </svg>
+          <svg class="relative w-6 h-6" viewBox="0 0 40 40" fill="none" aria-label="ProofMed Logo">
+            <path d="M11 6c0 3 0 5.5 0 5.5a5 5 0 0 0 5 5" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M21 6c0 3 0 5.5 0 5.5a5 5 0 0 1-5 5" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M16 16.5v2.5a7.5 7.5 0 0 0 5.7 7.28" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M31.5 22a6.5 6.5 0 1 0-13 0c0 5 6.5 12 6.5 12s6.5-7 6.5-12Z" stroke="white" stroke-width="2.2" stroke-linejoin="round"/>
+            <circle cx="25" cy="22" r="2.3" fill="white"/>
+          </svg>
+        </div>
         <div class="min-w-0">
           <h1 class="text-lg font-extrabold tracking-tight leading-tight">ProofMed</h1>
           <p class="text-brand-100 text-[11px] leading-tight truncate">GOÄ-Prüfung &amp; Geofencing-Nachweis</p>
@@ -63,14 +78,23 @@
 
       <!-- Tabs -->
       <div class="grid grid-cols-2 gap-2 mb-4 bg-slate-100 rounded-xl p-1">
-        <button id="tabBtnFoto" type="button" class="tabBtn min-h-[40px] rounded-lg text-sm font-bold transition">📷 Foto</button>
-        <button id="tabBtnManual" type="button" class="tabBtn min-h-[40px] rounded-lg text-sm font-bold transition">✍️ Manuell</button>
+        <button id="tabBtnFoto" type="button" class="tabBtn min-h-[40px] rounded-lg text-sm font-bold transition flex items-center justify-center gap-1.5">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 shrink-0"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3.5"/></svg>
+          Foto
+        </button>
+        <button id="tabBtnManual" type="button" class="tabBtn min-h-[40px] rounded-lg text-sm font-bold transition flex items-center justify-center gap-1.5">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 shrink-0"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+          Manuell
+        </button>
       </div>
 
       <!-- Foto tab -->
       <div id="tabFoto" class="space-y-3">
         <label for="cameraInput" class="flex flex-col items-center justify-center gap-1 border-2 border-dashed border-brand-300 rounded-2xl py-5 px-4 bg-brand-50/50 active:scale-[.98] transition cursor-pointer">
-          <span class="text-4xl leading-none">📷</span>
+          <span class="relative flex items-center justify-center h-14 w-14 mb-0.5">
+            <span class="absolute inset-0 rounded-full bg-brand-400/25 blur-lg"></span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="relative h-8 w-8 text-brand-600"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3.5"/></svg>
+          </span>
           <span class="font-bold text-brand-700 text-sm text-center leading-snug">Rechnung fotografieren<br/>／ Datei hochladen</span>
           <span class="text-xs text-slate-500 text-center">Kamera öffnet sich automatisch &middot; JPEG, PNG oder PDF</span>
           <input id="cameraInput" type="file" accept="image/*,application/pdf" capture="environment" class="hidden" />
@@ -80,13 +104,18 @@
           <img id="photoPreview" class="h-16 w-16 rounded-xl object-cover bg-slate-100 shrink-0" alt="Vorschau der fotografierten Rechnung" />
           <div class="min-w-0 flex-1">
             <div id="photoFileName" class="text-sm font-semibold truncate">rechnung.jpg</div>
-            <div id="photoStatus" class="text-xs text-emerald-600 font-medium">✅ Bereit zur Prüfung</div>
+            <div id="photoStatus" class="text-xs text-emerald-600 font-medium flex items-center gap-1">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5 shrink-0"><path d="M20 13c0 5-3.5 8.5-8 9.5-4.5-1-8-4.5-8-9.5V6.3a1 1 0 0 1 .6-.9L12 2l7.4 3.4a1 1 0 0 1 .6.9Z"/><path d="m9 12 2 2 4-4"/></svg>
+              <span>Bereit zur Prüfung</span>
+            </div>
           </div>
-          <button id="removePhotoBtn" type="button" class="h-9 w-9 shrink-0 rounded-full bg-slate-100 text-slate-500 font-bold active:scale-90 transition">✕</button>
+          <button id="removePhotoBtn" type="button" class="h-9 w-9 shrink-0 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center active:scale-90 transition">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
         </div>
         <p class="text-[11px] text-slate-400 leading-snug px-1">
           Hinweis: Die Texterkennung läuft serverseitig. Ist auf diesem Server keine OCR-Engine verfügbar,
-          können Sie die Ziffern jederzeit unter „✍️ Manuell” selbst auswählen.
+          können Sie die Ziffern jederzeit unter „Manuell” selbst auswählen.
         </p>
       </div>
 
@@ -139,7 +168,9 @@
     <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
       <div class="flex items-center justify-between gap-2 mb-1">
         <div class="flex items-center gap-2">
-          <span class="text-lg">📍</span>
+          <span class="h-7 w-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+          </span>
           <h2 class="text-base font-bold">Praxis-Tagebuch (Geofencing Logs)</h2>
         </div>
         <button id="clearGeofenceLogBtn" type="button" class="text-[11px] text-slate-400 underline underline-offset-2 active:text-slate-600 shrink-0">Löschen</button>
@@ -157,7 +188,10 @@
     <div class="max-w-md mx-auto">
       <button id="verifyBtn" disabled
         class="w-full min-h-[56px] bg-brand-600 hover:bg-brand-700 active:scale-[.98] transition text-white font-extrabold text-base rounded-2xl shadow-lg shadow-brand-600/20 disabled:opacity-40 disabled:shadow-none flex items-center justify-center gap-2">
-        <span>✅ Abrechnung jetzt prüfen</span>
+        <span class="flex items-center justify-center gap-2">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 shrink-0"><path d="M20 13c0 5-3.5 8.5-8 9.5-4.5-1-8-4.5-8-9.5V6.3a1 1 0 0 1 .6-.9L12 2l7.4 3.4a1 1 0 0 1 .6.9Z"/><path d="m9 12 2 2 4-4"/></svg>
+          Abrechnung jetzt prüfen
+        </span>
         <span id="selCount" class="hidden bg-white/20 text-white text-xs font-bold rounded-full h-5 min-w-[20px] px-1.5 items-center justify-center">0</span>
       </button>
     </div>
@@ -166,7 +200,9 @@
   <!-- Result overlay (mobile result dashboard) -->
   <div id="resultOverlay" class="hidden fixed inset-0 z-50 bg-slate-50 overflow-y-auto">
     <div class="safe-top sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-slate-100 px-4 py-3 flex items-center gap-3">
-      <button id="closeResultBtn" class="h-9 w-9 rounded-full bg-slate-100 text-slate-600 font-bold active:scale-90 transition shrink-0">←</button>
+      <button id="closeResultBtn" class="h-9 w-9 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center active:scale-90 transition shrink-0">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+      </button>
       <h2 class="text-base font-bold">Prüfergebnis</h2>
     </div>
     <div id="resultContent" class="max-w-md mx-auto px-4 py-4 pb-10 space-y-4"></div>
@@ -179,6 +215,31 @@
     let attachedPhoto = null; // File
 
     const $ = (id) => document.getElementById(id);
+
+    // --- Vector-Icon-System (Lucide/Heroicons-Stil, inline SVG statt Emoji) ---
+    const ICON_PATHS = {
+      camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3.5"/>',
+      pencil: '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>',
+      mapPin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+      info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+      shieldCheck: '<path d="M20 13c0 5-3.5 8.5-8 9.5-4.5-1-8-4.5-8-9.5V6.3a1 1 0 0 1 .6-.9L12 2l7.4 3.4a1 1 0 0 1 .6.9Z"/><path d="m9 12 2 2 4-4"/>',
+      alertTriangle: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+      clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+      refreshCw: '<path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/>',
+      x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+      arrowLeft: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+      helpCircle: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/><path d="M12 17h.01"/>',
+      ban: '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
+      fileWarning: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 11v4"/><path d="M12 18h.01"/>',
+      loader: '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
+    };
+    function icon(name, cls) {
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls || 'h-5 w-5'} shrink-0">${ICON_PATHS[name] || ICON_PATHS.info}</svg>`;
+    }
+    function setPhotoStatus(innerHtml, colorClass) {
+      $('photoStatus').innerHTML = innerHtml;
+      $('photoStatus').className = `text-xs font-medium flex items-center gap-1 ${colorClass}`;
+    }
 
     // --- Time helpers ---
     function fmtTime(d) { return d.toTimeString().slice(0, 5); }
@@ -308,8 +369,8 @@
       const fotoActive = tab === 'foto';
       $('tabFoto').classList.toggle('hidden', !fotoActive);
       $('tabManual').classList.toggle('hidden', fotoActive);
-      $('tabBtnFoto').className = 'tabBtn min-h-[40px] rounded-lg text-sm font-bold transition ' + (fotoActive ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500');
-      $('tabBtnManual').className = 'tabBtn min-h-[40px] rounded-lg text-sm font-bold transition ' + (!fotoActive ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500');
+      $('tabBtnFoto').className = 'tabBtn min-h-[40px] rounded-lg text-sm font-bold transition flex items-center justify-center gap-1.5 ' + (fotoActive ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500');
+      $('tabBtnManual').className = 'tabBtn min-h-[40px] rounded-lg text-sm font-bold transition flex items-center justify-center gap-1.5 ' + (!fotoActive ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500');
       updateCTAState();
     }
     $('tabBtnFoto').addEventListener('click', () => setTab('foto'));
@@ -374,7 +435,7 @@
               ${PRESET_FACTORS.map(f => `<button type="button" class="factorPresetBtn text-xs font-bold px-2.5 py-1 rounded-full bg-white border border-slate-200 active:scale-95 transition" onclick="setPresetFactor('${z.ziffer}', ${f})">${f.toFixed(1)}×</button>`).join('')}
             </div>
             <div id="justWrap_${z.ziffer}" class="hidden mt-2.5">
-              <label class="text-[11px] font-bold text-red-600 flex items-center gap-1 mb-1">⚠️ Medizinische Begründung erforderlich</label>
+              <label class="text-[11px] font-bold text-red-600 flex items-center gap-1 mb-1">${icon('alertTriangle', 'h-3.5 w-3.5')} Medizinische Begründung erforderlich</label>
               <textarea id="just_${z.ziffer}" rows="2" placeholder="z.B. besonders schwieriger / zeitaufwändiger Behandlungsverlauf …"
                 class="w-full text-sm rounded-lg border border-red-200 bg-red-50/50 px-2.5 py-2 focus:ring-2 focus:ring-red-400 outline-none"
                 oninput="updateCTAState()"></textarea>
@@ -469,8 +530,7 @@
 
       let uploadFile = file;
       if (file.type.startsWith('image/')) {
-        $('photoStatus').textContent = '🗜️ Bild wird optimiert …';
-        $('photoStatus').className = 'text-xs text-slate-500 font-medium';
+        setPhotoStatus(icon('loader', 'h-3.5 w-3.5 animate-spin') + '<span>Bild wird optimiert …</span>', 'text-slate-500');
         try {
           uploadFile = await resizeImageForUpload(file);
         } catch (err) {
@@ -481,10 +541,10 @@
 
       attachedPhoto = uploadFile;
       const kb = (n) => (n / 1024).toFixed(0) + ' KB';
-      $('photoStatus').textContent = (uploadFile !== file)
-        ? `✅ Bereit zur Prüfung · ${kb(uploadFile.size)} (Original ${kb(file.size)})`
-        : '✅ Bereit zur Prüfung';
-      $('photoStatus').className = 'text-xs text-emerald-600 font-medium';
+      const readyLabel = (uploadFile !== file)
+        ? `Bereit zur Prüfung · ${kb(uploadFile.size)} (Original ${kb(file.size)})`
+        : 'Bereit zur Prüfung';
+      setPhotoStatus(icon('shieldCheck', 'h-3.5 w-3.5') + `<span>${readyLabel}</span>`, 'text-emerald-600');
 
       if (uploadFile.type.startsWith('image/')) {
         $('photoPreview').src = URL.createObjectURL(uploadFile);
@@ -534,7 +594,9 @@
     function setBtnLoading(loading) {
       const btn = $('verifyBtn');
       btn.disabled = loading;
-      btn.querySelector('span').textContent = loading ? '⏳ Prüfe …' : '✅ Abrechnung jetzt prüfen';
+      btn.querySelector('span').innerHTML = loading
+        ? icon('loader', 'h-5 w-5 animate-spin') + 'Prüfe …'
+        : icon('shieldCheck', 'h-5 w-5') + 'Abrechnung jetzt prüfen';
     }
 
     async function runManualValidate() {
@@ -600,7 +662,7 @@
         const geofenceMatch = findGeofenceMatch(data.extracted_treatment_date, data.extracted_praxis_name);
         showResult(data.report, data.parsed_ziffern, geofenceMatch, data.extracted_treatment_date, data.extracted_praxis_name);
       } catch (e) {
-        alert('Foto konnte nicht ausgewertet werden:\n' + e.message + '\n\nBitte alternativ „✍️ Manuell” nutzen.');
+        alert('Foto konnte nicht ausgewertet werden:\n' + e.message + '\n\nBitte alternativ „Manuell” nutzen.');
         setTab('manual');
       } finally {
         setBtnLoading(false);
@@ -610,10 +672,10 @@
 
     // --- Result rendering ---
     const ANOMALY_META = {
-      time_anomaly: { icon: '⏱️', label: 'Zeit-Konflikt' },
-      exclusion_anomaly: { icon: '🚫', label: 'Ausschluss-Konflikt' },
-      multiplier_anomaly: { icon: '🧾', label: 'Unbegründeter Höchstsatz' },
-      unknown_ziffer: { icon: '❓', label: 'Unbekannte Ziffer' },
+      time_anomaly: { icon: 'clock', label: 'Zeit-Konflikt' },
+      exclusion_anomaly: { icon: 'ban', label: 'Ausschluss-Konflikt' },
+      multiplier_anomaly: { icon: 'fileWarning', label: 'Unbegründeter Höchstsatz' },
+      unknown_ziffer: { icon: 'helpCircle', label: 'Unbekannte Ziffer' },
     };
 
     function showResult(report, parsedZiffern, geofenceMatch, extractedDate, extractedPraxis) {
@@ -632,7 +694,7 @@
         return `
           <div class="fade-in rounded-2xl bg-emerald-50 border-2 border-emerald-300 p-4">
             <div class="flex items-center gap-2 mb-2">
-              <span class="text-xl">📍</span>
+              <span class="h-7 w-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">${icon('mapPin', 'h-4 w-4')}</span>
               <span class="font-extrabold text-emerald-700 text-sm">Geofencing-Beweis aktiv</span>
             </div>
             <p class="text-xs text-emerald-700 mb-2.5 leading-snug">
@@ -661,9 +723,10 @@
       }
       if (extractedDate && extractedPraxis) {
         return `
-          <div class="fade-in rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5 text-xs text-slate-500">
-            ℹ️ Kein Geofencing-Tagebuch-Eintrag für <span class="font-semibold">${extractedPraxis}</span>
-            am <span class="font-semibold">${formatDateDE(extractedDate)}</span> gefunden.
+          <div class="fade-in rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5 text-xs text-slate-500 flex items-start gap-2">
+            ${icon('info', 'h-4 w-4 mt-0.5 text-slate-400')}
+            <span>Kein Geofencing-Tagebuch-Eintrag für <span class="font-semibold">${extractedPraxis}</span>
+            am <span class="font-semibold">${formatDateDE(extractedDate)}</span> gefunden.</span>
           </div>`;
       }
       return '';
@@ -677,12 +740,12 @@
 
       const head = clean
         ? `<div class="fade-in rounded-2xl bg-emerald-50 border-2 border-emerald-300 p-5 text-center">
-             <div class="text-5xl mb-2">✅</div>
+             <div class="mx-auto mb-2 h-14 w-14 rounded-full bg-emerald-100 flex items-center justify-center">${icon('shieldCheck', 'h-8 w-8 text-emerald-600')}</div>
              <div class="text-lg font-extrabold text-emerald-700">Rechnung fehlerfrei</div>
              <div class="text-sm text-emerald-600 mt-1">Keine Auffälligkeiten festgestellt.</div>
            </div>`
         : `<div class="fade-in rounded-2xl bg-red-50 border-2 border-red-300 p-5 text-center">
-             <div class="text-5xl mb-2">⚠️</div>
+             <div class="mx-auto mb-2 h-14 w-14 rounded-full bg-red-100 flex items-center justify-center">${icon('alertTriangle', 'h-8 w-8 text-red-600')}</div>
              <div class="text-lg font-extrabold text-red-700">Auffälligkeiten gefunden</div>
              <div class="text-sm text-red-600 mt-1">${anomalies.length} Hinweis(e) zur Prüfung.</div>
            </div>`;
@@ -700,18 +763,18 @@
         </div>`;
 
       const scannedNote = parsedZiffern
-        ? `<div class="text-xs text-slate-400 px-1">📷 ${parsedZiffern.length} Ziffer(n) automatisch aus dem Foto erkannt.</div>`
+        ? `<div class="text-xs text-slate-400 px-1 flex items-center gap-1.5">${icon('camera', 'h-3.5 w-3.5')} ${parsedZiffern.length} Ziffer(n) automatisch aus dem Foto erkannt.</div>`
         : '';
 
       const anomalyHtml = anomalies.length ? `
         <div class="space-y-2">
           ${anomalies.map(a => {
-            const meta = ANOMALY_META[a.type] || { icon: 'ℹ️', label: a.type };
+            const meta = ANOMALY_META[a.type] || { icon: 'info', label: a.type };
             const critical = a.severity === 'critical';
             return `
             <div class="fade-in rounded-2xl border-2 ${critical ? 'border-red-300 bg-red-50' : 'border-amber-200 bg-amber-50'} p-4">
               <div class="flex items-center gap-2 mb-1">
-                <span class="text-lg">${meta.icon}</span>
+                <span class="${critical ? 'text-red-600' : 'text-amber-600'}">${icon(meta.icon, 'h-5 w-5')}</span>
                 <span class="font-bold text-sm ${critical ? 'text-red-700' : 'text-amber-700'}">${meta.label}</span>
                 ${a.related_ziffern?.length ? `<span class="text-[11px] text-slate-500 ml-auto">${a.related_ziffern.map(z => 'Ziffer ' + z).join(', ')}</span>` : ''}
               </div>
@@ -729,8 +792,8 @@
         </div>`;
 
       const resetBtn = `
-        <button onclick="resetFlow()" class="w-full min-h-[48px] rounded-2xl bg-slate-800 text-white font-bold text-sm active:scale-[.98] transition mt-2">
-          🔄 Neue Prüfung starten
+        <button onclick="resetFlow()" class="w-full min-h-[48px] rounded-2xl bg-slate-800 text-white font-bold text-sm active:scale-[.98] transition mt-2 flex items-center justify-center gap-2">
+          ${icon('refreshCw', 'h-4 w-4')} Neue Prüfung starten
         </button>`;
 
       return head + geofenceCard + scannedNote + metrics + anomalyHtml + details + resetBtn;
@@ -739,7 +802,7 @@
     function renderZifferAccordion(d, anomalies) {
       const flagged = anomalies.some(a => a.type === 'multiplier_anomaly' && a.related_ziffern?.includes(d.ziffer));
       const factorBadge = flagged
-        ? `<span class="text-xs font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded-full">×${d.multiplier} ⚠️</span>`
+        ? `<span class="text-xs font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded-full flex items-center gap-1">×${d.multiplier} ${icon('alertTriangle', 'h-3 w-3')}</span>`
         : `<span class="text-xs font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">×${d.multiplier}</span>`;
       return `
         <details class="fade-in rounded-2xl border border-slate-200 bg-white overflow-hidden">
