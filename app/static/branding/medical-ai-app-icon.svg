@@ -1,20 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   ProofMed – Medical AI App Icon (Master SVG)
-  Eigenstaendig konstruiertes Icon: stilisiertes Stethoskop-Symbol vor
-  Blueprint-/Radar-Hintergrund. Keine externen Referenzen, keine Bilddaten,
-  keine Fremdlogos. Sicher skalierbar von 1024px bis 16px.
+  Eigenstaendig konstruiertes Icon (kein Trace/Bildimport): stilisiertes
+  Stethoskop-Symbol vor Blueprint-/Radar-Hintergrund. Keine externen
+  Referenzen, keine Bilddaten, keine Fremdlogos. Skalierbar 1024px bis 16px.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="ProofMed App-Icon">
   <title>ProofMed App-Icon</title>
 
   <defs>
     <linearGradient id="background-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#25B9FF"/>
-      <stop offset="28%" stop-color="#1578F2"/>
-      <stop offset="55%" stop-color="#2442D8"/>
-      <stop offset="78%" stop-color="#3421C8"/>
-      <stop offset="100%" stop-color="#6A20E5"/>
+      <stop offset="0%" stop-color="#1855FF"/>
+      <stop offset="100%" stop-color="#6A11CD"/>
     </linearGradient>
 
     <linearGradient id="surface-highlight" x1="0%" y1="0%" x2="70%" y2="70%">
@@ -108,28 +105,44 @@
 
   <!-- ============ HAUPTSYMBOL: Stethoskop-Silhouette ============ -->
   <g id="symbol-shadow">
-    <g id="stethoscope-symbol" transform="translate(184 173) scale(3.0)" filter="url(#symbol-drop-shadow-filter)">
-      <!-- Obere Buegel: flache geometrische Enden (square cap), scharfe Biegung
-           (miter-join). Zuerst gezeichnet, damit die runden Verbindungskappen
-           des Schlauchs (unten) ihre unteren Enden nahtlos ueberdecken. -->
-      <path d="M54 10 V54 L76 70" fill="none" stroke="url(#symbol-fill)" stroke-width="16" stroke-linecap="square" stroke-linejoin="miter" stroke-miterlimit="3"/>
-      <path d="M146 10 V54 L124 70" fill="none" stroke="url(#symbol-fill)" stroke-width="16" stroke-linecap="square" stroke-linejoin="miter" stroke-miterlimit="3"/>
-
-      <!-- Geschwungener zentraler Schlauch + Schleife -->
-      <path d="M76 70 Q100 92 100 116 C100 150 76 164 76 190 C76 218 104 228 128 214 C145 204 152 186 152 166"
-            fill="none" stroke="url(#symbol-fill)" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M124 70 Q100 92 100 116" fill="none" stroke="url(#symbol-fill)" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
-
-      <!-- Membran (rechts unten) -->
-      <g id="membrane">
-        <circle cx="152" cy="172" r="27" fill="url(#membrane-fill)" stroke="#C3CBE0" stroke-width="2"/>
-        <circle cx="152" cy="172" r="27" fill="none" stroke="#FFFFFF" stroke-width="1.5" opacity="0.7"/>
-        <ellipse cx="145" cy="163" rx="13" ry="9" fill="url(#membrane-gloss)"/>
+    <g id="stethoscope-symbol" transform="translate(232 138) scale(2.75)" filter="url(#symbol-drop-shadow-filter)">
+      <!-- Rim-Schicht: gleiche Pfade, etwas breiter + kuehleres Grausilber,
+           zuerst gezeichnet -> feine Kantenlinie fuer mehr 3D-Tiefe. -->
+      <g stroke="#B9C2DA" stroke-width="21" fill="none">
+        <path d="M84 16 L48 16 L48 74" stroke-linecap="square" stroke-linejoin="miter" stroke-miterlimit="3"/>
+        <path d="M116 16 L152 16 L152 74" stroke-linecap="square" stroke-linejoin="miter" stroke-miterlimit="3"/>
+        <path d="M48 74 Q48 100 100 116" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M152 74 Q152 100 100 116" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M100 116 C100 150 76 164 76 190 C76 218 104 228 128 214 C145 204 152 186 152 166" stroke-linecap="round" stroke-linejoin="round"/>
       </g>
 
-      <!-- Zwei feine Spitzen unterhalb der Membran -->
-      <path d="M136 195 L131.5 224 L139.5 200 Z" fill="url(#symbol-fill)"/>
-      <path d="M168 195 L172.5 224 L164.5 200 Z" fill="url(#symbol-fill)"/>
+      <!-- Binaurale Buegel: zwei eckige "["/"]"-Formen. Flacher Kappenschnitt
+           (square cap) + scharfe 90-Grad-Biegung (miter-join). Zuerst
+           gezeichnet, damit die runden Verbindungskappen des Schlauchs
+           (unten) ihre unteren Enden nahtlos ueberdecken. -->
+      <path d="M84 16 L48 16 L48 74" fill="none" stroke="url(#symbol-fill)" stroke-width="18" stroke-linecap="square" stroke-linejoin="miter" stroke-miterlimit="3"/>
+      <path d="M116 16 L152 16 L152 74" fill="none" stroke="url(#symbol-fill)" stroke-width="18" stroke-linecap="square" stroke-linejoin="miter" stroke-miterlimit="3"/>
+      <path d="M48 74 Q48 100 100 116" fill="none" stroke="url(#symbol-fill)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M152 74 Q152 100 100 116" fill="none" stroke="url(#symbol-fill)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+
+      <!-- Geschwungener zentraler Schlauch: ein durchgehender, glatter Bogen,
+           der nach unten links schwingt und rechts unten wieder hochfuehrt. -->
+      <path d="M100 116 C100 150 76 164 76 190 C76 218 104 228 128 214 C145 204 152 186 152 166"
+            fill="none" stroke="url(#symbol-fill)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+
+      <!-- Membran / Chestpiece (rechts unten): saubere, solide Kreisscheibe -->
+      <g id="membrane">
+        <circle cx="152" cy="172" r="28" fill="url(#membrane-fill)" stroke="#C3CBE0" stroke-width="2"/>
+        <circle cx="152" cy="172" r="28" fill="none" stroke="#FFFFFF" stroke-width="1.5" opacity="0.7"/>
+        <ellipse cx="144" cy="162" rx="13" ry="9" fill="url(#membrane-gloss)"/>
+      </g>
+
+      <!-- Location-Pin-Spitze: GENAU EINE schlanke, spitz zulaufende Nadel,
+           die exakt von der unteren Mitte der Membran senkrecht nach unten
+           zeigt (kein Dreibein, keine Schraeglage). -->
+      <path d="M144 197 L160 197 L158 208 L146 208 Z" fill="url(#symbol-fill)"/>
+      <path d="M146 206 L158 206 L152 250 Z" fill="url(#symbol-fill)"/>
+      <path d="M152 209 L152 246" stroke="#B9C2DA" stroke-width="1.5" stroke-linecap="round" opacity="0.8"/>
     </g>
   </g>
 </svg>
