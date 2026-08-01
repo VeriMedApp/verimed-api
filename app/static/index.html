@@ -4,7 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1" />
   <meta name="theme-color" content="#1d4ed8" />
-  <title>VeriMed &middot; Abrechnungs-Check</title>
+  <meta name="description" content="ProofMed – Automatische GOÄ-Rechnungsprüfung & Geofencing-Nachweis" />
+  <title>ProofMed – Automatische GOÄ-Rechnungsprüfung & Geofencing-Nachweis</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -39,8 +40,8 @@
       <div class="flex items-center gap-2.5">
         <div class="h-10 w-10 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center text-xl shrink-0">🩺</div>
         <div class="min-w-0">
-          <h1 class="text-lg font-extrabold tracking-tight leading-tight">VeriMed</h1>
-          <p class="text-brand-100 text-[11px] leading-tight truncate">GOÄ-Abrechnungs-Check</p>
+          <h1 class="text-lg font-extrabold tracking-tight leading-tight">ProofMed</h1>
+          <p class="text-brand-100 text-[11px] leading-tight truncate">GOÄ-Prüfung &amp; Geofencing-Nachweis</p>
         </div>
       </div>
       <div class="flex items-center gap-1.5 text-[11px] bg-white/10 px-2.5 py-1 rounded-full shrink-0">
@@ -133,6 +134,22 @@
         <span id="durationTicker" class="text-2xl font-extrabold text-brand-600 tabular-nums">– min</span>
       </div>
     </section>
+
+    <!-- Section C: Geofencing-Tagebuch -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+      <div class="flex items-center justify-between gap-2 mb-1">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">📍</span>
+          <h2 class="text-base font-bold">Praxis-Tagebuch (Geofencing Logs)</h2>
+        </div>
+        <button id="clearGeofenceLogBtn" type="button" class="text-[11px] text-slate-400 underline underline-offset-2 active:text-slate-600 shrink-0">Löschen</button>
+      </div>
+      <p class="text-xs text-slate-500 mb-3">
+        Jede durchgeführte Prüfung wird automatisch als Geofencing-Nachweis auf diesem Gerät gespeichert
+        (localStorage) &middot; dient als Aufenthaltsnachweis für später eingehende Rechnungen.
+      </p>
+      <div id="geofenceLogList" class="space-y-2"></div>
+    </section>
   </main>
 
   <!-- Sticky bottom CTA -->
@@ -180,6 +197,91 @@
       if (!a || !b) return null;
       return (combineToday(b) - combineToday(a)) / 60000;
     }
+    function todayISODate() {
+      const d = new Date();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${d.getFullYear()}-${mm}-${dd}`;
+    }
+    function formatDateDE(iso) {
+      if (!iso) return '';
+      const [y, m, d] = iso.split('-');
+      return `${d}.${m}.${y}`;
+    }
+
+    // --- Geofencing-Tagebuch (Proof-of-Presence-Log, lokal auf dem Geraet) ---
+    const GEOFENCE_LOG_KEY = 'proofmed_geofence_log';
+    const GEOFENCE_LOG_DISPLAY_LIMIT = 5;
+    const GEOFENCE_LOG_STORAGE_LIMIT = 25;
+
+    function loadGeofenceLog() {
+      try {
+        const raw = localStorage.getItem(GEOFENCE_LOG_KEY);
+        return raw ? JSON.parse(raw) : [];
+      } catch {
+        return [];
+      }
+    }
+    function saveGeofenceLog(entries) {
+      try {
+        localStorage.setItem(GEOFENCE_LOG_KEY, JSON.stringify(entries.slice(0, GEOFENCE_LOG_STORAGE_LIMIT)));
+      } catch (e) {
+        console.warn('Geofencing-Tagebuch konnte nicht gespeichert werden:', e);
+      }
+    }
+    function addGeofenceLogEntry({ praxisName, dateISO, arrival, departure, durationMinutes: mins }) {
+      const entries = loadGeofenceLog();
+      entries.unshift({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        praxisName, dateISO, arrival, departure,
+        durationMinutes: Math.round(mins),
+        createdAt: Date.now(),
+      });
+      saveGeofenceLog(entries);
+      renderGeofenceLog();
+    }
+    function renderGeofenceLog() {
+      const container = $('geofenceLogList');
+      const entries = loadGeofenceLog();
+      if (!entries.length) {
+        container.innerHTML = `
+          <div class="text-slate-400 text-xs py-4 text-center leading-relaxed">
+            Noch keine Besuche erfasst.<br/>Eine manuelle Prüfung legt automatisch einen Tagebuch-Eintrag an.
+          </div>`;
+        return;
+      }
+      container.innerHTML = entries.slice(0, GEOFENCE_LOG_DISPLAY_LIMIT).map(e => `
+        <div class="flex items-center justify-between gap-2 text-sm bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5">
+          <div class="min-w-0">
+            <div class="font-semibold text-slate-700 truncate">${e.praxisName}</div>
+            <div class="text-xs text-slate-400">${formatDateDE(e.dateISO)} &middot; ${e.arrival}–${e.departure} Uhr</div>
+          </div>
+          <div class="shrink-0 text-xs font-bold bg-brand-50 text-brand-700 px-2 py-1 rounded-full">Aufenthalt: ${e.durationMinutes} Min</div>
+        </div>`).join('');
+    }
+    function normalizePraxisName(name) {
+      return (name || '')
+        .toLowerCase()
+        .replace(/\bpraxis\b/g, '')
+        .replace(/\bdr\.?\b/g, '')
+        .replace(/[^a-zäöüß0-9]+/g, ' ')
+        .trim();
+    }
+    function findGeofenceMatch(extractedDateISO, extractedPraxisName) {
+      if (!extractedDateISO || !extractedPraxisName) return null;
+      const target = normalizePraxisName(extractedPraxisName);
+      if (!target) return null;
+      const entries = loadGeofenceLog().filter(e => e.dateISO === extractedDateISO);
+      return entries.find(e => {
+        const n = normalizePraxisName(e.praxisName);
+        return n && (n.includes(target) || target.includes(n));
+      }) || null;
+    }
+    $('clearGeofenceLogBtn').addEventListener('click', () => {
+      if (!confirm('Geofencing-Tagebuch auf diesem Gerät wirklich löschen?')) return;
+      saveGeofenceLog([]);
+      renderGeofenceLog();
+    });
     function updateTicker() {
       const m = durationMinutes();
       const t = $('durationTicker');
@@ -437,11 +539,14 @@
 
     async function runManualValidate() {
       const items = selectedManualItems();
+      const praxisName = $('praxisName').value || 'Unbenannte Praxis';
+      const arrival = $('arrival').value;
+      const departure = $('departure').value;
       const payload = {
         patient_id: 'mobil-' + Date.now(),
-        praxis_name: $('praxisName').value || 'Unbenannte Praxis',
-        geofence_arrival: combineToday($('arrival').value).toISOString(),
-        geofence_departure: combineToday($('departure').value).toISOString(),
+        praxis_name: praxisName,
+        geofence_arrival: combineToday(arrival).toISOString(),
+        geofence_departure: combineToday(departure).toISOString(),
         total_billed_amount: 0,
         billed_ziffern: items.map(i => ({ ziffer: i.ziffer, multiplier: i.multiplier, justification: i.justification })),
       };
@@ -452,6 +557,17 @@
         });
         const data = await r.json();
         if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : ('HTTP ' + r.status));
+        // Ein manuell durchgefuehrter Check simuliert einen live erfassten
+        // Geofencing-Besuch -> wird als Tagebuch-Eintrag hinterlegt, damit
+        // spaeter eingehende Rechnungen (Foto-Scan) dagegen abgeglichen
+        // werden koennen.
+        addGeofenceLogEntry({
+          praxisName,
+          dateISO: todayISODate(),
+          arrival,
+          departure,
+          durationMinutes: data.actual_duration_minutes,
+        });
         showResult(data);
       } catch (e) {
         alert('Fehler bei der Prüfung: ' + e.message);
@@ -478,7 +594,11 @@
           const detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
           throw new Error(detail || ('HTTP ' + r.status));
         }
-        showResult(data.report, data.parsed_ziffern);
+        // Das aus der Rechnung erkannte Behandlungsdatum + Praxisname gegen
+        // das lokale Geofencing-Tagebuch abgleichen (unabhaengiger
+        // Anwesenheitsnachweis fuer eine spaeter eingegangene Rechnung).
+        const geofenceMatch = findGeofenceMatch(data.extracted_treatment_date, data.extracted_praxis_name);
+        showResult(data.report, data.parsed_ziffern, geofenceMatch, data.extracted_treatment_date, data.extracted_praxis_name);
       } catch (e) {
         alert('Foto konnte nicht ausgewertet werden:\n' + e.message + '\n\nBitte alternativ „✍️ Manuell” nutzen.');
         setTab('manual');
@@ -496,8 +616,8 @@
       unknown_ziffer: { icon: '❓', label: 'Unbekannte Ziffer' },
     };
 
-    function showResult(report, parsedZiffern) {
-      $('resultContent').innerHTML = renderResultHtml(report, parsedZiffern);
+    function showResult(report, parsedZiffern, geofenceMatch, extractedDate, extractedPraxis) {
+      $('resultContent').innerHTML = renderResultHtml(report, parsedZiffern, geofenceMatch, extractedDate, extractedPraxis);
       $('resultOverlay').classList.remove('hidden');
       $('resultOverlay').scrollTop = 0;
       document.body.style.overflow = 'hidden';
@@ -507,9 +627,53 @@
       document.body.style.overflow = '';
     });
 
-    function renderResultHtml(data, parsedZiffern) {
+    function renderGeofenceProofCard(geofenceMatch, extractedDate, extractedPraxis) {
+      if (geofenceMatch) {
+        return `
+          <div class="fade-in rounded-2xl bg-emerald-50 border-2 border-emerald-300 p-4">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-xl">📍</span>
+              <span class="font-extrabold text-emerald-700 text-sm">Geofencing-Beweis aktiv</span>
+            </div>
+            <p class="text-xs text-emerald-700 mb-2.5 leading-snug">
+              Für diese Rechnung liegt ein passender Geofencing-Tagebuch-Eintrag vor &mdash; die tatsächliche
+              Anwesenheit ist unabhängig nachgewiesen.
+            </p>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div class="bg-white/70 rounded-lg px-2.5 py-2">
+                <div class="text-emerald-600/70">Praxis</div>
+                <div class="font-bold text-emerald-800 truncate">${geofenceMatch.praxisName}</div>
+              </div>
+              <div class="bg-white/70 rounded-lg px-2.5 py-2">
+                <div class="text-emerald-600/70">Datum</div>
+                <div class="font-bold text-emerald-800">${formatDateDE(geofenceMatch.dateISO)}</div>
+              </div>
+              <div class="bg-white/70 rounded-lg px-2.5 py-2">
+                <div class="text-emerald-600/70">Ankunft / Abfahrt</div>
+                <div class="font-bold text-emerald-800">${geofenceMatch.arrival}–${geofenceMatch.departure} Uhr</div>
+              </div>
+              <div class="bg-white/70 rounded-lg px-2.5 py-2">
+                <div class="text-emerald-600/70">Nachgewiesene Dauer</div>
+                <div class="font-bold text-emerald-800">${geofenceMatch.durationMinutes} Min</div>
+              </div>
+            </div>
+          </div>`;
+      }
+      if (extractedDate && extractedPraxis) {
+        return `
+          <div class="fade-in rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5 text-xs text-slate-500">
+            ℹ️ Kein Geofencing-Tagebuch-Eintrag für <span class="font-semibold">${extractedPraxis}</span>
+            am <span class="font-semibold">${formatDateDE(extractedDate)}</span> gefunden.
+          </div>`;
+      }
+      return '';
+    }
+
+    function renderResultHtml(data, parsedZiffern, geofenceMatch, extractedDate, extractedPraxis) {
       const clean = data.status === 'processed_clean';
       const anomalies = data.anomalies || [];
+
+      const geofenceCard = renderGeofenceProofCard(geofenceMatch, extractedDate, extractedPraxis);
 
       const head = clean
         ? `<div class="fade-in rounded-2xl bg-emerald-50 border-2 border-emerald-300 p-5 text-center">
@@ -569,7 +733,7 @@
           🔄 Neue Prüfung starten
         </button>`;
 
-      return head + scannedNote + metrics + anomalyHtml + details + resetBtn;
+      return head + geofenceCard + scannedNote + metrics + anomalyHtml + details + resetBtn;
     }
 
     function renderZifferAccordion(d, anomalies) {
@@ -614,6 +778,7 @@
     updateTicker();
     checkHealth();
     loadCatalog();
+    renderGeofenceLog();
   </script>
 </body>
 </html>

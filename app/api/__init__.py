@@ -1,1 +1,1 @@
-"""API-Schicht fuer Project VeriMed."""
+"""API-Schicht fuer ProofMed."""

@@ -117,4 +117,19 @@ class ParseAndValidateResponse(BaseModel):
     raw_text_excerpt: str | None = Field(
         None, description="Ausschnitt des per OCR/Textextraktion erkannten Rohtexts."
     )
+    extracted_treatment_date: str | None = Field(
+        None,
+        description=(
+            "Aus der Rechnung erkanntes Behandlungsdatum (ISO 8601), sofern "
+            "vorhanden. Dient dem clientseitigen Abgleich mit dem "
+            "Geofencing-Tagebuch (ProofMed Geofencing-Beweis)."
+        ),
+    )
+    extracted_praxis_name: str | None = Field(
+        None,
+        description=(
+            "Aus der Rechnung erkannter Praxisname, sofern vorhanden. Dient "
+            "dem clientseitigen Abgleich mit dem Geofencing-Tagebuch."
+        ),
+    )
     report: ClaimValidationReport

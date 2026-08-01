@@ -20,6 +20,7 @@ import io
 import logging
 import re
 from dataclasses import dataclass, field
+from datetime import date
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,11 @@ class ParsedInvoice:
     ziffern: list[ParsedZiffer] = field(default_factory=list)
     justification: str | None = None
     raw_text: str = ""
+    # Fuer den Abgleich mit dem clientseitigen Geofencing-Tagebuch (ProofMed
+    # "Geofencing-Beweis"): Behandlungsdatum (ISO 8601) und Praxisname, sofern
+    # auf der Rechnung erkennbar.
+    treatment_date: str | None = None
+    praxis_name: str | None = None
 
 
 # --- Regex-Heuristiken --------------------------------------------------------
@@ -112,6 +118,19 @@ _JUSTIFICATION_PATTERN = re.compile(
     r"Begr[uü]ndung\s*[:\-]\s*(.+)",
     re.IGNORECASE,
 )
+# Erkennt ein explizit ausgezeichnetes Behandlungsdatum, z.B.
+# "Behandlungsdatum: 15.03.2026" oder "Behandlungstag 15.3.26".
+_TREATMENT_DATE_LABELED_PATTERN = re.compile(
+    r"Behandlungs(?:datum|tag)\s*[:\-]?\s*(\d{1,2}\.\d{1,2}\.\d{2,4})",
+    re.IGNORECASE,
+)
+# Fallback: irgendein deutsches Datum (TT.MM.JJJJ / TT.MM.JJ) im Text, falls
+# kein explizit ausgezeichnetes Behandlungsdatum gefunden wurde.
+_GENERIC_DATE_PATTERN = re.compile(r"\b\d{1,2}\.\d{1,2}\.\d{2,4}\b")
+# Erkennt den Praxisnamen, z.B. "Praxis Dr. Weber" oder "Praxis Mustermann".
+_PRAXIS_NAME_PATTERN = re.compile(
+    r"Praxis\s+((?:Dr\.?\s+)?[A-ZÄÖÜ][\wÄÖÜäöüß\-]*(?:\s+[A-ZÄÖÜ][\wÄÖÜäöüß\-]*){0,3})"
+)
 
 
 def _to_float(raw: str) -> float:
@@ -122,6 +141,51 @@ def _to_float(raw: str) -> float:
 def _looks_like_year(raw: str) -> bool:
     """True, wenn der erkannte Zahlenwert eher eine Jahreszahl als eine Ziffer ist."""
     return raw.isdigit() and _ZIFFER_YEAR_MIN <= int(raw) <= _ZIFFER_YEAR_MAX
+
+
+def _parse_german_date(raw: str) -> str | None:
+    """Wandelt ein TT.MM.JJJJ/TT.MM.JJ-Datum in ISO 8601 (YYYY-MM-DD) um."""
+    parts = raw.split(".")
+    if len(parts) != 3:
+        return None
+    try:
+        day, month, year = (int(p) for p in parts)
+    except ValueError:
+        return None
+    if year < 100:
+        year += 2000
+    try:
+        return date(year, month, day).isoformat()
+    except ValueError:
+        return None
+
+
+def _extract_treatment_date(text: str) -> str | None:
+    """Erkennt das Behandlungsdatum einer Rechnung (ISO 8601), sofern vorhanden."""
+    labeled = _TREATMENT_DATE_LABELED_PATTERN.search(text)
+    if labeled:
+        parsed = _parse_german_date(labeled.group(1))
+        if parsed:
+            return parsed
+    generic = _GENERIC_DATE_PATTERN.search(text)
+    if generic:
+        return _parse_german_date(generic.group(0))
+    return None
+
+
+def _extract_praxis_name(text: str) -> str | None:
+    """Erkennt den Praxisnamen einer Rechnung, sofern vorhanden.
+
+    Zeilenweise Suche (statt ueber den gesamten Text), da "\\s+" in der
+    Namens-Wiederholungsgruppe sonst ueber Zeilenumbrueche hinweg auch die
+    naechste Zeile (z.B. "Behandlungsdatum") als Namensbestandteil erfassen
+    wuerde.
+    """
+    for line in text.splitlines():
+        match = _PRAXIS_NAME_PATTERN.search(line)
+        if match:
+            return f"Praxis {match.group(1).strip()}"
+    return None
 
 
 def _guess_suffix(filename: str | None) -> str:
@@ -240,7 +304,13 @@ def parse_invoice_text(text: str) -> ParsedInvoice:
                 )
             )
 
-    return ParsedInvoice(ziffern=ziffern, justification=justification, raw_text=text)
+    return ParsedInvoice(
+        ziffern=ziffern,
+        justification=justification,
+        raw_text=text,
+        treatment_date=_extract_treatment_date(sanitized_text),
+        praxis_name=_extract_praxis_name(sanitized_text),
+    )
 
 
 def parse_uploaded_invoice(

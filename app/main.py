@@ -1,4 +1,4 @@
-"""FastAPI-Einstiegspunkt fuer Project VeriMed."""
+"""FastAPI-Einstiegspunkt fuer ProofMed."""
 
 from __future__ import annotations
 
@@ -36,6 +36,7 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     version="0.1.0",
     description=(
+        "ProofMed - automatische GOAE-Rechnungspruefung & Geofencing-Nachweis: "
         "Backend zur Pruefung privataerztlicher GOAE-Rechnungen mittels "
         "deterministischer Regeln sowie Geofencing-/Zeit-Plausibilitaet."
     ),

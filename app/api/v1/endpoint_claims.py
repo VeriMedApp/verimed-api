@@ -148,6 +148,8 @@ async def parse_and_validate_claim(
     return ParseAndValidateResponse(
         parsed_ziffern=billed_ziffern,
         raw_text_excerpt=parsed.raw_text[:_RAW_TEXT_EXCERPT_LIMIT],
+        extracted_treatment_date=parsed.treatment_date,
+        extracted_praxis_name=parsed.praxis_name,
         report=report,
     )
 

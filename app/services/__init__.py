@@ -1,4 +1,4 @@
-"""Service-Schicht (Geschaeftslogik) fuer Project VeriMed.
+"""Service-Schicht (Geschaeftslogik) fuer ProofMed.
 
 ``ClaimValidator`` wird lazy via PEP 562 bereitgestellt, um einen zirkulaeren
 Import zu vermeiden (models.claim -> services.crypto -> services-Paket).

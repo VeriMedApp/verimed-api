@@ -1,4 +1,4 @@
-"""Pydantic v2 Schemas fuer Project VeriMed."""
+"""Pydantic v2 Schemas fuer ProofMed."""
 
 from app.schemas.claim import (
     Anomaly,

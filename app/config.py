@@ -1,4 +1,4 @@
-"""Zentrale Anwendungskonfiguration fuer Project VeriMed.
+"""Zentrale Anwendungskonfiguration fuer ProofMed.
 
 Die Konfiguration wird ueber Umgebungsvariablen bzw. eine optionale `.env`
 Datei gesteuert (Pydantic Settings v2). So lassen sich lokale SQLite-Setups
@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     )
 
     # --- Allgemein -----------------------------------------------------------
-    PROJECT_NAME: str = "Project VeriMed"
+    PROJECT_NAME: str = "ProofMed"
     API_V1_PREFIX: str = "/api/v1"
     DEBUG: bool = True
 

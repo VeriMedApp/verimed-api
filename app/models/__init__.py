@@ -1,4 +1,4 @@
-"""SQLAlchemy ORM-Modelle fuer Project VeriMed.
+"""SQLAlchemy ORM-Modelle fuer ProofMed.
 
 Der zentrale Import stellt sicher, dass alle Modelle bei der gemeinsamen
 `Base.metadata` registriert sind (wichtig fuer create_all und Alembic).
