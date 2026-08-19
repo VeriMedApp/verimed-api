@@ -275,6 +275,46 @@
       </div>
       <div id="geofenceLogList" class="space-y-2"></div>
     </section>
+
+    <!-- Section D: Rechnungen & Zahlungsziele -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="h-7 w-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+        </span>
+        <h2 class="text-base font-bold">Rechnungen &amp; Zahlungsziele</h2>
+      </div>
+      <p class="text-xs text-slate-500 mb-3">
+        Geprüfte Rechnungen mit 14-tägigem Zahlungsziel. Bei aktivem Einwand wird die Zahlung automatisch gestoppt.
+      </p>
+      <div id="invoiceLedgerList" class="space-y-2"></div>
+    </section>
+
+    <!-- Section E: Jahres-Dossier -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="h-7 w-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+        </span>
+        <h2 class="text-base font-bold">Jahres-Dossier (Steuer &amp; Beihilfe)</h2>
+      </div>
+      <p class="text-xs text-slate-500 mb-3">
+        Aufenthaltsnachweise und geprüfte Rechnungen für Außergewöhnliche Belastungen, Steuererklärung und Beihilfe.
+      </p>
+      <label for="dossierYear" class="block text-xs font-medium text-slate-500 mb-1">Jahr</label>
+      <select id="dossierYear"
+        class="w-full text-sm rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 mb-3 focus:ring-2 focus:ring-brand-500 outline-none"></select>
+      <div class="grid grid-cols-1 gap-2">
+        <button type="button" id="dossierPdfBtn"
+          class="min-h-[48px] rounded-xl bg-slate-800 text-white text-sm font-bold px-3 py-2 active:scale-[.98] transition flex items-center justify-center gap-2">
+          📊 Jahres-Dossier (PDF) herunterladen
+        </button>
+        <button type="button" id="dossierCsvBtn"
+          class="min-h-[44px] rounded-xl bg-white border border-slate-200 text-slate-800 text-sm font-bold px-3 py-2 active:scale-[.98] transition flex items-center justify-center gap-2">
+          CSV für Excel / WISO Steuer
+        </button>
+      </div>
+    </section>
   </main>
 
   <!-- Sticky bottom CTA -->
@@ -343,6 +383,8 @@
       copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
       printer: '<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/>',
       send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
+      download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
+      calendar: '<rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/>',
       archive: '<path d="M10 12h4"/><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/>',
       trash2: '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
       clipboardList: '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/>',
@@ -397,8 +439,11 @@
     // --- Geofencing-Tagebuch (Proof-of-Presence-Log, lokal auf dem Geraet) ---
     const GEOFENCE_LOG_KEY = 'proofmed_geofence_log';
     const ACTIVE_VISIT_KEY = 'proofmed_active_visit';
+    const INVOICE_LEDGER_KEY = 'proofmed_invoice_ledger';
     const GEOFENCE_LOG_DISPLAY_LIMIT = 5;
     const GEOFENCE_LOG_STORAGE_LIMIT = 25;
+    const INVOICE_LEDGER_LIMIT = 50;
+    const PAYMENT_TERM_DAYS = 14;
     let liveTickTimer = null;
     let toastTimer = null;
 
@@ -1450,6 +1495,133 @@
         a.type === 'time_anomaly' || a.type === 'exclusion_anomaly' || a.type === 'multiplier_anomaly'
       );
     }
+    function addDaysISO(iso, days) {
+      const src = iso || todayISODate();
+      const [y, m, d] = src.split('-').map(Number);
+      const dt = new Date(y, m - 1, d);
+      dt.setDate(dt.getDate() + Number(days || 0));
+      const mm = String(dt.getMonth() + 1).padStart(2, '0');
+      const dd = String(dt.getDate()).padStart(2, '0');
+      return `${dt.getFullYear()}-${mm}-${dd}`;
+    }
+    function daysUntilISO(iso) {
+      if (!iso) return null;
+      const [y, m, d] = iso.split('-').map(Number);
+      const due = new Date(y, m - 1, d);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      return Math.round((due - today) / 86400000);
+    }
+    function parseDEAmount(raw) {
+      if (raw == null || raw === '') return null;
+      const n = Number(String(raw).replace(/\s/g, '').replace(/\./g, '').replace(',', '.'));
+      return Number.isFinite(n) ? n : null;
+    }
+    function formatEUR(amount) {
+      if (amount == null || !Number.isFinite(Number(amount))) return '–';
+      return Number(amount).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+    }
+    function extractAmountFromText(text) {
+      if (!text) return null;
+      const labeled = text.match(/(?:gesamtbetrag|rechnungsbetrag|endbetrag|zahlbetrag|summe)[^\d]{0,24}(\d{1,5}(?:[.\s]\d{3})*,\d{2})/i);
+      if (labeled) return parseDEAmount(labeled[1]);
+      const euro = text.match(/(\d{1,5}(?:[.\s]\d{3})*,\d{2})\s*(?:€|EUR)/i);
+      return euro ? parseDEAmount(euro[1]) : null;
+    }
+    function paymentDueISO(dateISO) {
+      return addDaysISO(dateISO || todayISODate(), PAYMENT_TERM_DAYS);
+    }
+    function paymentDueLabel(dateISO) {
+      const due = paymentDueISO(dateISO);
+      const n = daysUntilISO(due);
+      const dueDE = formatDateDE(due);
+      let rel = '';
+      if (n == null) rel = '';
+      else if (n > 1) rel = ` (in ${n} Tagen)`;
+      else if (n === 1) rel = ' (morgen)';
+      else if (n === 0) rel = ' (heute)';
+      else rel = ` (überfällig seit ${Math.abs(n)} Tagen)`;
+      return `⏳ Zahlungsziel: Fällig am ${dueDE}${rel}`;
+    }
+    function renderPaymentDueBadge(dateISO) {
+      return `<div class="fade-in rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm font-bold text-sky-800">${paymentDueLabel(dateISO)}</div>`;
+    }
+    function renderPaymentFreezeBanner() {
+      return `<div class="fade-in rounded-2xl border-2 border-red-400 bg-red-50 p-4">
+        <div class="font-extrabold text-red-700 text-sm">⛔ Zahlung gestoppt – Warten auf korrigierte Liquidation</div>
+        <p class="text-xs text-red-600 mt-1 leading-snug">Zahlungsziel-Erinnerungen sind ausgesetzt, solange ein Einwand aktiv ist. Bitte erst die korrigierte Rechnung prüfen.</p>
+      </div>`;
+    }
+    let currentLedgerInvoiceId = null;
+    function loadInvoiceLedger() {
+      try {
+        const raw = localStorage.getItem(INVOICE_LEDGER_KEY);
+        return raw ? JSON.parse(raw) : [];
+      } catch {
+        return [];
+      }
+    }
+    function saveInvoiceLedger(entries) {
+      try {
+        localStorage.setItem(INVOICE_LEDGER_KEY, JSON.stringify(entries.slice(0, INVOICE_LEDGER_LIMIT)));
+      } catch (e) {
+        console.warn('Rechnungsarchiv konnte nicht gespeichert werden:', e);
+      }
+    }
+    function persistInvoiceRecord(record) {
+      const entries = loadInvoiceLedger();
+      const idx = entries.findIndex(e =>
+        e.id === record.id
+        || (record.invoiceNum && record.invoiceNum !== 'unbekannt' && e.invoiceNum === record.invoiceNum && e.dateISO === record.dateISO)
+      );
+      if (idx >= 0) {
+        const keepId = entries[idx].id;
+        entries[idx] = { ...entries[idx], ...record, id: keepId };
+      } else entries.unshift(record);
+      saveInvoiceLedger(entries);
+      currentLedgerInvoiceId = record.id;
+      renderInvoiceLedger();
+      return record;
+    }
+    function patchInvoiceRecord(id, patch) {
+      const entries = loadInvoiceLedger();
+      const idx = entries.findIndex(e => e.id === id);
+      if (idx < 0) return null;
+      entries[idx] = { ...entries[idx], ...patch };
+      saveInvoiceLedger(entries);
+      renderInvoiceLedger();
+      return entries[idx];
+    }
+    function geofenceStatusLabel(entry) {
+      if (isVerifiedGpsProof(entry)) return 'GPS-Beweis';
+      if (entry) return 'Manuell (ohne GPS)';
+      return '–';
+    }
+    function renderInvoiceLedger() {
+      const container = $('invoiceLedgerList');
+      if (!container) return;
+      const entries = loadInvoiceLedger();
+      if (!entries.length) {
+        container.innerHTML = `<div class="text-slate-400 text-xs py-4 text-center leading-relaxed">Noch keine geprüften Rechnungen.<br/>Nach einer Prüfung erscheint hier das Zahlungsziel oder die Zahlungssperre.</div>`;
+        return;
+      }
+      container.innerHTML = entries.slice(0, 8).map(inv => {
+        const frozen = !!inv.objectionActive;
+        const status = frozen
+          ? `<div class="text-[11px] font-extrabold text-red-700">⛔ Zahlung gestoppt</div>`
+          : `<div class="text-[11px] font-bold text-sky-800">${paymentDueLabel(inv.dateISO)}</div>`;
+        return `<div class="rounded-xl border ${frozen ? 'border-red-200 bg-red-50/60' : 'border-slate-100 bg-slate-50'} px-3 py-2.5 space-y-1">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <div class="font-semibold text-slate-800 truncate">${escapeHtml(inv.praxisName || 'Praxis')}</div>
+              <div class="text-xs text-slate-400">${escapeHtml(inv.dateDE || formatDateDE(inv.dateISO))} · Nr. ${escapeHtml(inv.invoiceNum || '–')}</div>
+            </div>
+            <div class="text-xs font-bold text-slate-700 shrink-0">${formatEUR(inv.amount)}</div>
+          </div>
+          ${status}
+        </div>`;
+      }).join('');
+    }
     function formatAnomalyBullet(a, data, geofenceMatch) {
       if (a.type === 'multiplier_anomaly') {
         const z = (a.related_ziffern || []).join(', ') || '–';
@@ -1684,20 +1856,17 @@ ${geoBox}
 <div class="sign"><div>Mit freundlichen Grüßen</div><div class="sign-line"></div><div class="sign-caption">Unterschrift Patientin / Patient</div></div>
 </article></body></html>`;
     }
-    async function printObjectionPdf() {
-      if (!lastObjection) return;
-      lastObjection.geofenceMatch = await ensureDiaryAuditFields(resolvePrintGeofence());
-      const html = buildObjectionPrintHtml();
+    function printHtmlViaIframe(html, frameId) {
       const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
       const url = URL.createObjectURL(blob);
-      let iframe = document.getElementById('objectionPrintFrame');
+      let iframe = document.getElementById(frameId);
       if (iframe) {
         URL.revokeObjectURL(iframe.dataset.blobUrl || '');
         iframe.remove();
       }
       iframe = document.createElement('iframe');
-      iframe.id = 'objectionPrintFrame';
-      iframe.title = 'Einwand-Druckvorschau';
+      iframe.id = frameId;
+      iframe.title = 'Druckvorschau';
       iframe.setAttribute('aria-hidden', 'true');
       iframe.dataset.blobUrl = url;
       iframe.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;border:0;pointer-events:none;';
@@ -1710,6 +1879,141 @@ ${geoBox}
       iframe.addEventListener('load', triggerPrint, { once: true });
       document.body.appendChild(iframe);
       iframe.src = url;
+      return html;
+    }
+    async function printObjectionPdf() {
+      if (!lastObjection) return;
+      lastObjection.geofenceMatch = await ensureDiaryAuditFields(resolvePrintGeofence());
+      printHtmlViaIframe(buildObjectionPrintHtml(), 'objectionPrintFrame');
+    }
+    function downloadTextFile(filename, text, mime) {
+      const blob = new Blob([text], { type: mime || 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    }
+    function collectDossierRows(year) {
+      const y = String(year);
+      const diaries = loadGeofenceLog().filter(e => (e.dateISO || '').startsWith(y));
+      const invoices = loadInvoiceLedger().filter(inv => (inv.dateISO || '').startsWith(y));
+      const used = new Set();
+      const praxisMatch = (a, b) => {
+        const na = normalizePraxisName(a);
+        const nb = normalizePraxisName(b);
+        return na && nb && (na.includes(nb) || nb.includes(na));
+      };
+      const rows = diaries.map(d => {
+        const inv = invoices.find(i => !used.has(i.id) && i.dateISO === d.dateISO && praxisMatch(i.praxisName, d.praxisName));
+        if (inv) used.add(inv.id);
+        return {
+          dateISO: d.dateISO,
+          dateDE: d.dateDE || formatDateDE(d.dateISO),
+          praxisName: d.praxisName,
+          durationMinutes: d.durationMinutes,
+          geofenceStatus: geofenceStatusLabel(d),
+          result: inv ? (inv.objectionActive ? 'Einwand' : 'Fehlerfrei') : 'Nur Aufenthalt',
+          amount: inv && inv.amount != null ? Number(inv.amount) : null,
+          invoiceNum: inv?.invoiceNum || '',
+        };
+      });
+      invoices.filter(i => !used.has(i.id)).forEach(inv => {
+        rows.push({
+          dateISO: inv.dateISO,
+          dateDE: inv.dateDE || formatDateDE(inv.dateISO),
+          praxisName: inv.praxisName,
+          durationMinutes: inv.durationMinutes || '',
+          geofenceStatus: inv.geofenceStatus || '–',
+          result: inv.objectionActive ? 'Einwand' : 'Fehlerfrei',
+          amount: inv.amount != null ? Number(inv.amount) : null,
+          invoiceNum: inv.invoiceNum || '',
+        });
+      });
+      rows.sort((a, b) => String(a.dateISO).localeCompare(String(b.dateISO)));
+      return rows;
+    }
+    function dossierYearValue() {
+      return Number($('dossierYear')?.value || new Date().getFullYear());
+    }
+    function initDossierYearSelect() {
+      const sel = $('dossierYear');
+      if (!sel) return;
+      const current = new Date().getFullYear();
+      const years = [];
+      for (let y = current + 1; y >= current - 4; y--) years.push(y);
+      sel.innerHTML = years.map(y => `<option value="${y}" ${y === current ? 'selected' : ''}>${y}</option>`).join('');
+    }
+    function csvEscape(value) {
+      const s = String(value ?? '');
+      if (/[;"\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    }
+    function buildDossierCsv(year) {
+      const rows = collectDossierRows(year);
+      const header = ['Behandlungsdatum', 'Praxis / Arzt', 'Aufenthaltsdauer (Min)', 'Geofencing-Status', 'Prüfergebnis', 'Gesamtbetrag (EUR)'];
+      const lines = [header.join(';')];
+      let sum = 0;
+      rows.forEach(r => {
+        if (Number.isFinite(r.amount)) sum += r.amount;
+        const amount = r.amount == null ? '' : Number(r.amount).toFixed(2).replace('.', ',');
+        lines.push([r.dateDE, r.praxisName, r.durationMinutes, r.geofenceStatus, r.result, amount].map(csvEscape).join(';'));
+      });
+      lines.push(['Summe', '', '', '', '', sum.toFixed(2).replace('.', ',')].join(';'));
+      return '\uFEFF' + lines.join('\r\n') + '\r\n';
+    }
+    function buildDossierPrintHtml(year) {
+      const rows = collectDossierRows(year);
+      let sum = 0;
+      const body = rows.map(r => {
+        if (Number.isFinite(r.amount)) sum += r.amount;
+        return `<tr>
+          <td>${escapeHtml(r.dateDE || '')}</td>
+          <td>${escapeHtml(r.praxisName || '')}</td>
+          <td>${escapeHtml(String(r.durationMinutes ?? '–'))}</td>
+          <td>${escapeHtml(r.geofenceStatus || '–')}</td>
+          <td>${escapeHtml(r.result || '–')}</td>
+          <td class="num">${escapeHtml(formatEUR(r.amount))}</td>
+        </tr>`;
+      }).join('') || `<tr><td colspan="6">Keine Einträge für ${year}.</td></tr>`;
+      return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"/><title>ProofMed Jahres-Dossier ${year}</title>
+<style>
+@page { size: A4 portrait; margin: 16mm; }
+body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #0f172a; }
+h1 { font-size: 14pt; margin: 0 0 2mm; }
+.sub { color: #64748b; font-size: 9pt; margin: 0 0 8mm; }
+table { width: 100%; border-collapse: collapse; }
+th, td { border: 1px solid #cbd5e1; padding: 2.2mm 2mm; text-align: left; vertical-align: top; }
+th { background: #eef2ff; font-size: 8.5pt; text-transform: uppercase; letter-spacing: .04em; }
+td.num, th.num { text-align: right; white-space: nowrap; }
+.total { font-weight: 800; background: #ecfdf5; }
+.note { margin-top: 8mm; font-size: 8.5pt; color: #64748b; }
+</style></head><body>
+<h1>ProofMed – Patientendossier &amp; Aufenthaltsnachweis für Steuer / Krankenkasse (Jahr ${year})</h1>
+<p class="sub">Außergewöhnliche Belastungen · Steuererklärung · Beihilfe · erstellt am ${escapeHtml(formatDateDE(todayISODate()))}</p>
+<table>
+  <thead><tr>
+    <th>Behandlungsdatum</th><th>Praxis / Arzt</th><th>Aufenthaltsdauer</th>
+    <th>Geofencing-Status</th><th>Prüfergebnis</th><th class="num">Gesamtbetrag (€)</th>
+  </tr></thead>
+  <tbody>${body}</tbody>
+  <tfoot><tr class="total"><td colspan="5">Gesamtsumme medizinischer Aufwendungen</td><td class="num">${escapeHtml(formatEUR(sum))}</td></tr></tfoot>
+</table>
+<p class="note">Diese Aufstellung dient als Nachweis gegenüber Finanzamt, Beihilfestelle oder Krankenkasse. Archivierte Geofencing-Einträge sind enthalten.</p>
+</body></html>`;
+    }
+    function printDossierPdf() {
+      const year = dossierYearValue();
+      printHtmlViaIframe(buildDossierPrintHtml(year), 'dossierPrintFrame');
+    }
+    function downloadDossierCsv() {
+      const year = dossierYearValue();
+      downloadTextFile(`proofmed_dossier_${year}.csv`, buildDossierCsv(year), 'text/csv;charset=utf-8');
+      showToast(`📊 CSV für ${year} heruntergeladen.`);
     }
 
     function fileToBase64(file) {
@@ -1770,6 +2074,9 @@ ${geoBox}
           throw new Error(detail);
         }
         showToast(`🟢 Einwand erfolgreich an ${email} gesendet!`);
+        if (currentLedgerInvoiceId) {
+          patchInvoiceRecord(currentLedgerInvoiceId, { objectionActive: true, objectionSent: true, status: 'objection' });
+        }
       } catch (e) {
         alert('E-Mail konnte nicht gesendet werden: ' + e.message);
       } finally {
@@ -1786,9 +2093,13 @@ ${geoBox}
       const invoiceNum = ocrMeta.invoiceNumber || extractInvoiceNumberFromText(ocrMeta.rawText) || 'unbekannt';
       const praxisName = extractedPraxis || report.praxis_name || $('praxisName')?.value || 'Unbenannte Praxis';
       const proof = await ensureDiaryAuditFields(geofenceMatch || resolveDiaryProof(extractedDate, extractedPraxis || praxisName));
-      const dateDE = formatDateDE(extractedDate) || formatDateDE(proof?.dateISO) || formatDateDE(selectedTreatmentDateISO());
+      const dateISO = extractedDate || proof?.dateISO || selectedTreatmentDateISO();
+      const dateDE = formatDateDE(dateISO) || formatDateDE(proof?.dateISO) || formatDateDE(selectedTreatmentDateISO());
       const anomalies = report.anomalies || [];
-      if (hasBillingDiscrepancy(anomalies)) {
+      const frozen = hasBillingDiscrepancy(anomalies);
+      const amount = extractAmountFromText(ocrMeta.rawText)
+        || (Number(report.total_billed_amount) > 0 ? Number(report.total_billed_amount) : null);
+      if (frozen) {
         const letter = buildObjectionLetter({ praxisName, invoiceNum, dateDE, anomalies, data: report, geofenceMatch: proof });
         lastObjection = {
           invoiceNum,
@@ -1803,7 +2114,24 @@ ${geoBox}
       } else {
         lastObjection = null;
       }
-      $('resultContent').innerHTML = renderResultHtml(report, parsedZiffern, proof, extractedDate, extractedPraxis);
+      const ledgerRecord = persistInvoiceRecord({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        invoiceNum,
+        praxisName,
+        dateISO,
+        dateDE,
+        amount,
+        dueDateISO: paymentDueISO(dateISO),
+        status: frozen ? 'objection' : 'clean',
+        objectionActive: frozen,
+        objectionSent: false,
+        geofenceStatus: geofenceStatusLabel(proof),
+        durationMinutes: proof?.durationMinutes ?? Math.round(report.actual_duration_minutes || 0),
+        diaryId: proof?.id || null,
+        createdAt: Date.now(),
+      });
+      currentLedgerInvoiceId = ledgerRecord.id;
+      $('resultContent').innerHTML = renderResultHtml(report, parsedZiffern, proof, extractedDate, extractedPraxis, { frozen, dateISO });
       if ($('objectionPreview') && lastObjection) $('objectionPreview').value = lastObjection.body;
       if ($('objectionPreset')) {
         $('objectionPreset').value = detectedPracticeEmail ? 'ocr' : 'manual';
@@ -1898,11 +2226,17 @@ ${geoBox}
       return '';
     }
 
-    function renderResultHtml(data, parsedZiffern, geofenceMatch, extractedDate, extractedPraxis) {
+    function renderResultHtml(data, parsedZiffern, geofenceMatch, extractedDate, extractedPraxis, paymentMeta) {
       const clean = data.status === 'processed_clean';
       const anomalies = data.anomalies || [];
+      paymentMeta = paymentMeta || {};
+      const frozen = paymentMeta.frozen != null ? paymentMeta.frozen : (!clean && !!lastObjection);
+      const dateISO = paymentMeta.dateISO || extractedDate || geofenceMatch?.dateISO || selectedTreatmentDateISO();
 
       const geofenceCard = renderGeofenceProofCard(geofenceMatch, extractedDate, extractedPraxis);
+      const paymentBanner = frozen
+        ? renderPaymentFreezeBanner()
+        : renderPaymentDueBadge(dateISO);
 
       const head = clean
         ? `<div class="fade-in rounded-2xl bg-emerald-50 border-2 border-emerald-300 p-5 text-center">
@@ -1964,7 +2298,7 @@ ${geoBox}
           ${icon('refreshCw', 'h-4 w-4')} Neue Prüfung starten
         </button>`;
 
-      return head + geofenceCard + scannedNote + metrics + anomalyHtml + objectionCard + details + resetBtn;
+      return head + paymentBanner + geofenceCard + scannedNote + metrics + anomalyHtml + objectionCard + details + resetBtn;
     }
 
     function renderObjectionCard() {
@@ -2055,7 +2389,11 @@ ${geoBox}
     checkHealth();
     loadCatalog();
     renderGeofenceLog();
+    renderInvoiceLedger();
     renderLiveVisit();
+    initDossierYearSelect();
+    $('dossierPdfBtn')?.addEventListener('click', printDossierPdf);
+    $('dossierCsvBtn')?.addEventListener('click', downloadDossierCsv);
     $('auditDiarySelect')?.addEventListener('change', updateCTAState);
   </script>
 </body>
