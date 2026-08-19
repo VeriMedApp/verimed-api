@@ -46,7 +46,7 @@
       left: 50%;
       bottom: calc(5.75rem + env(safe-area-inset-bottom));
       transform: translateX(-50%);
-      z-index: 70;
+    z-index: 80;
       max-width: calc(100% - 2rem);
     }
     .toast-in { animation: toastIn .28s ease-out; }
@@ -300,6 +300,8 @@
     let catalog = [];
     let activeTab = 'foto';
     let attachedPhoto = null; // File
+    let detectedPracticeEmail = '';
+    let lastObjection = null;
 
     const $ = (id) => document.getElementById(id);
 
@@ -322,6 +324,9 @@
       logIn: '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/>',
       logOut: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>',
       receipt: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>',
+      mail: '<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
+      copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+      printer: '<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/>',
     };
     function icon(name, cls) {
       return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls || 'h-5 w-5'} shrink-0">${ICON_PATHS[name] || ICON_PATHS.info}</svg>`;
@@ -976,7 +981,7 @@
         const data = await r.json();
         if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : ('HTTP ' + r.status));
         const geofenceMatch = findGeofenceMatch(times.dateISO, times.praxisName, times.dateISO);
-        showResult(data, null, geofenceMatch, times.dateISO, times.praxisName);
+        showResult(data, null, geofenceMatch, times.dateISO, times.praxisName, {});
       } catch (e) {
         alert('Fehler bei der Prüfung: ' + e.message);
       } finally {
@@ -1012,7 +1017,18 @@
           data.extracted_praxis_name,
           times.dateISO,
         );
-        showResult(data.report, data.parsed_ziffern, geofenceMatch, data.extracted_treatment_date, data.extracted_praxis_name);
+        showResult(
+          data.report,
+          data.parsed_ziffern,
+          geofenceMatch,
+          data.extracted_treatment_date,
+          data.extracted_praxis_name,
+          {
+            email: data.extracted_practice_email,
+            invoiceNumber: data.extracted_invoice_number,
+            rawText: data.raw_text_excerpt,
+          },
+        );
       } catch (e) {
         alert('Foto konnte nicht ausgewertet werden:\n' + e.message + '\n\nBitte alternativ „GOÄ manuell” nutzen.');
         setTab('manual');
@@ -1030,8 +1046,165 @@
       unknown_ziffer: { icon: 'helpCircle', label: 'Unbekannte Ziffer' },
     };
 
-    function showResult(report, parsedZiffern, geofenceMatch, extractedDate, extractedPraxis) {
+    function extractEmailFromText(text) {
+      if (!text) return '';
+      const re = /\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b/gi;
+      const found = text.match(re) || [];
+      if (!found.length) return '';
+      const preferred = found.find(e => /^(info|rechnung|praxis|kontakt|mail|office|abrechnung|verwaltung)/i.test(e.split('@')[0]));
+      return preferred || found[0];
+    }
+    function extractInvoiceNumberFromText(text) {
+      if (!text) return '';
+      const labeled = text.match(/Rechnungs(?:nr\.?|nummer)\s*[:.\-]?\s*([A-ZÄÖÜ0-9][A-ZÄÖÜ0-9.\-/]{2,})/i);
+      if (labeled) return labeled[1].replace(/\.$/, '');
+      const ref = text.match(/\b(?:GO[ÄA]E?-)?20(?:2[0-9]|3[0-5])-\d{1,6}\b/i);
+      return ref ? ref[0] : '';
+    }
+    function formatMultiplierDE(value) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return String(value ?? '');
+      return n.toFixed(1).replace('.', ',');
+    }
+    function hasBillingDiscrepancy(anomalies) {
+      return (anomalies || []).some(a =>
+        a.type === 'time_anomaly' || a.type === 'exclusion_anomaly' || a.type === 'multiplier_anomaly'
+      );
+    }
+    function formatAnomalyBullet(a, data, geofenceMatch) {
+      if (a.type === 'multiplier_anomaly') {
+        const z = (a.related_ziffern || []).join(', ') || '–';
+        const detail = (data.ziffer_details || []).find(d => (a.related_ziffern || []).includes(d.ziffer));
+        const mul = detail ? formatMultiplierDE(detail.multiplier) : '';
+        return `Ziffer ${z}: ${mul}x ohne Begründung`;
+      }
+      if (a.type === 'time_anomaly') {
+        const arr = geofenceMatch?.arrival || '';
+        const dep = geofenceMatch?.departure || '';
+        const actual = geofenceMatch?.durationMinutes ?? Math.round(data.actual_duration_minutes);
+        const req = Math.round(data.required_treatment_time_minutes);
+        const range = (arr && dep) ? ` von ${arr} bis ${dep} Uhr` : '';
+        return `Zeit-Konflikt: ${req} Min. gefordert vs. ${actual} Min. Geofencing-Anwesenheit${range}`;
+      }
+      if (a.type === 'exclusion_anomaly') {
+        const z = (a.related_ziffern || []).map(x => 'Ziffer ' + x).join(' und ');
+        return `Ausschluss-Konflikt: ${z} dürfen nicht gemeinsam abgerechnet werden`;
+      }
+      return a.message;
+    }
+    function buildObjectionLetter({ praxisName, invoiceNum, dateDE, anomalies, data, geofenceMatch }) {
+      const issues = (anomalies || [])
+        .filter(a => a.type === 'time_anomaly' || a.type === 'exclusion_anomaly' || a.type === 'multiplier_anomaly')
+        .map((a, i) => `${i + 1}. ${formatAnomalyBullet(a, data, geofenceMatch)}`);
+      const arrival = geofenceMatch?.arrival || '–';
+      const departure = geofenceMatch?.departure || '–';
+      const duration = geofenceMatch?.durationMinutes ?? Math.round(data.actual_duration_minutes || 0);
+      const lines = [
+        'Sehr geehrte Damen und Herren,',
+        '',
+        `hiermit lege ich formell Einwand gegen die Rechnung Nr. ${invoiceNum} der ${praxisName} vom ${dateDE} ein.`,
+        '',
+        'Bei der Prüfung der Abrechnung wurden folgende Unstimmigkeiten festgestellt:',
+        '',
+        ...issues,
+        '',
+        'Geofencing-Nachweis (tatsächliche Anwesenheit):',
+        `Ankunft: ${arrival} Uhr`,
+        `Abfahrt: ${departure} Uhr`,
+        `Dauer: ${duration} Minuten`,
+        '',
+        'Ich fordere Sie daher auf, die Rechnung zu prüfen und eine korrigierte Abrechnung auszustellen.',
+        '',
+        'Mit freundlichen Grüßen',
+      ];
+      return lines.join('\n');
+    }
+    function currentObjectionEmail() {
+      return ($('objectionEmail')?.value || detectedPracticeEmail || '').trim();
+    }
+    function currentObjectionBody() {
+      return ($('objectionPreview')?.value || lastObjection?.body || '').trim();
+    }
+    function openObjectionMail() {
+      if (!lastObjection) return;
+      const targetEmail = currentObjectionEmail();
+      const invoiceNum = lastObjection.invoiceNum || '';
+      const body = currentObjectionBody();
+      const href = `mailto:${targetEmail}?subject=${encodeURIComponent('Einwand Rechnung ' + invoiceNum)}&body=${encodeURIComponent(body)}`;
+      lastObjection.mailtoHref = href;
+      window.location.href = href;
+    }
+    function copyObjectionText() {
+      const body = currentObjectionBody();
+      if (!body) return;
+      const done = () => showToast('🟢 Widerspruchstext in die Zwischenablage kopiert!');
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(body).then(done).catch(() => {
+          $('objectionPreview')?.select();
+          document.execCommand('copy');
+          done();
+        });
+      } else {
+        $('objectionPreview')?.select();
+        document.execCommand('copy');
+        done();
+      }
+    }
+    function printObjectionPdf() {
+      if (!lastObjection) return;
+      const body = currentObjectionBody().replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+      const g = lastObjection.geofenceMatch;
+      const badge = g ? `
+        <div style="margin-top:18px;padding:14px 16px;border:2px solid #059669;border-radius:12px;background:#ecfdf5;">
+          <div style="font-weight:800;color:#047857;margin-bottom:8px;">Geofencing-Nachweis</div>
+          <div>Praxis: <strong>${g.praxisName || ''}</strong></div>
+          <div>Datum: <strong>${g.dateDE || formatDateDE(g.dateISO) || ''}</strong></div>
+          <div>Ankunft / Abfahrt: <strong>${g.arrival || '–'}–${g.departure || '–'} Uhr</strong></div>
+          <div>Nachgewiesene Dauer: <strong>${g.durationMinutes || '–'} Min</strong></div>
+        </div>` : '';
+      const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"/><title>Einwand Rechnung ${lastObjection.invoiceNum}</title>
+        <style>
+          body { font-family: Georgia, 'Times New Roman', serif; color: #0f172a; max-width: 720px; margin: 32px auto; padding: 0 24px; }
+          h1 { font-family: Inter, system-ui, sans-serif; font-size: 20px; }
+          pre { white-space: pre-wrap; font-family: inherit; line-height: 1.55; }
+          .meta { font-family: Inter, system-ui, sans-serif; font-size: 12px; color: #64748b; margin-bottom: 16px; }
+        </style></head><body>
+          <h1>Rechtssicherer Einwand</h1>
+          <div class="meta">Empfänger: ${currentObjectionEmail() || '–'} · Rechnung ${lastObjection.invoiceNum}</div>
+          <pre>${body}</pre>
+          ${badge}
+        </body></html>`;
+      const w = window.open('', '_blank', 'noopener,noreferrer,width=800,height=900');
+      if (!w) { alert('Pop-up blockiert. Bitte Pop-ups für ProofMed erlauben.'); return; }
+      w.document.write(html);
+      w.document.close();
+      w.focus();
+      w.print();
+    }
+
+    function showResult(report, parsedZiffern, geofenceMatch, extractedDate, extractedPraxis, ocrMeta) {
+      ocrMeta = ocrMeta || {};
+      detectedPracticeEmail = ocrMeta.email || extractEmailFromText(ocrMeta.rawText) || '';
+      const invoiceNum = ocrMeta.invoiceNumber || extractInvoiceNumberFromText(ocrMeta.rawText) || 'unbekannt';
+      const praxisName = extractedPraxis || report.praxis_name || $('praxisName')?.value || 'Unbenannte Praxis';
+      const dateDE = formatDateDE(extractedDate) || formatDateDE(geofenceMatch?.dateISO) || formatDateDE(selectedTreatmentDateISO());
+      const anomalies = report.anomalies || [];
+      if (hasBillingDiscrepancy(anomalies)) {
+        lastObjection = {
+          invoiceNum,
+          praxisName,
+          dateDE,
+          email: detectedPracticeEmail,
+          geofenceMatch: geofenceMatch || null,
+          body: buildObjectionLetter({ praxisName, invoiceNum, dateDE, anomalies, data: report, geofenceMatch }),
+          mailtoHref: '',
+        };
+      } else {
+        lastObjection = null;
+      }
       $('resultContent').innerHTML = renderResultHtml(report, parsedZiffern, geofenceMatch, extractedDate, extractedPraxis);
+      if ($('objectionPreview') && lastObjection) $('objectionPreview').value = lastObjection.body;
+      if ($('objectionEmail')) $('objectionEmail').value = detectedPracticeEmail;
       $('resultOverlay').classList.remove('hidden');
       $('resultOverlay').scrollTop = 0;
       document.body.style.overflow = 'hidden';
@@ -1135,6 +1308,8 @@
           }).join('')}
         </div>` : '';
 
+      const objectionCard = renderObjectionCard();
+
       const details = `
         <div>
           <div class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2 px-1">Geprüfte Ziffern &middot; antippen für Details</div>
@@ -1148,7 +1323,42 @@
           ${icon('refreshCw', 'h-4 w-4')} Neue Prüfung starten
         </button>`;
 
-      return head + geofenceCard + scannedNote + metrics + anomalyHtml + details + resetBtn;
+      return head + geofenceCard + scannedNote + metrics + anomalyHtml + objectionCard + details + resetBtn;
+    }
+
+    function renderObjectionCard() {
+      if (!lastObjection) return '';
+      return `
+        <div class="fade-in rounded-2xl border-2 border-brand-300 bg-white p-4">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="h-7 w-7 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">${icon('mail', 'h-4 w-4')}</span>
+            <h3 class="font-extrabold text-brand-800 text-sm">Rechtssicheren Einwand einlegen</h3>
+          </div>
+          <p class="text-xs text-slate-500 mb-3 leading-snug">
+            Formelles Widerspruchsschreiben an die Praxis — vorbereitet aus den festgestellten Unstimmigkeiten
+            und dem Geofencing-Nachweis.
+          </p>
+          <label for="objectionEmail" class="block text-xs font-medium text-slate-500 mb-1">Empfänger-E-Mail</label>
+          <input id="objectionEmail" type="email" placeholder="z. B. info@praxis.de"
+            class="w-full text-sm rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 mb-3 focus:ring-2 focus:ring-brand-500 outline-none" />
+          <label for="objectionPreview" class="block text-xs font-medium text-slate-500 mb-1">Vorschau des Widerspruchsschreibens</label>
+          <textarea id="objectionPreview" rows="12"
+            class="w-full text-xs leading-relaxed rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 mb-3 focus:ring-2 focus:ring-brand-500 outline-none font-sans"></textarea>
+          <div class="grid grid-cols-1 gap-2">
+            <button type="button" onclick="openObjectionMail()"
+              class="min-h-[44px] rounded-xl bg-brand-600 text-white text-sm font-bold px-3 py-2 active:scale-[.98] transition flex items-center justify-center gap-2">
+              ${icon('mail', 'h-4 w-4')} In Mail-App öffnen
+            </button>
+            <button type="button" onclick="copyObjectionText()"
+              class="min-h-[44px] rounded-xl bg-white border border-slate-200 text-slate-800 text-sm font-bold px-3 py-2 active:scale-[.98] transition flex items-center justify-center gap-2">
+              ${icon('copy', 'h-4 w-4')} Text kopieren
+            </button>
+            <button type="button" onclick="printObjectionPdf()"
+              class="min-h-[44px] rounded-xl bg-slate-800 text-white text-sm font-bold px-3 py-2 active:scale-[.98] transition flex items-center justify-center gap-2">
+              ${icon('printer', 'h-4 w-4')} Als Einwand-PDF drucken
+            </button>
+          </div>
+        </div>`;
     }
 
     function renderZifferAccordion(d, anomalies) {

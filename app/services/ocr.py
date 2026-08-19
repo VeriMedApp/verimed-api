@@ -81,6 +81,8 @@ class ParsedInvoice:
     # auf der Rechnung erkennbar.
     treatment_date: str | None = None
     praxis_name: str | None = None
+    practice_email: str | None = None
+    invoice_number: str | None = None
 
 
 # --- Regex-Heuristiken --------------------------------------------------------
@@ -131,6 +133,26 @@ _GENERIC_DATE_PATTERN = re.compile(r"\b\d{1,2}\.\d{1,2}\.\d{2,4}\b")
 _PRAXIS_NAME_PATTERN = re.compile(
     r"Praxis\s+((?:Dr\.?\s+)?[A-ZÄÖÜ][\wÄÖÜäöüß\-]*(?:\s+[A-ZÄÖÜ][\wÄÖÜäöüß\-]*){0,3})"
 )
+# Praxis-/Abrechnungs-E-Mail im Rechnungskopf, z.B. info@mvz-philippstor.de.
+_EMAIL_PATTERN = re.compile(
+    r"\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b",
+    re.IGNORECASE,
+)
+_PREFERRED_EMAIL_LOCALS = (
+    "info",
+    "rechnung",
+    "praxis",
+    "kontakt",
+    "mail",
+    "office",
+    "abrechnung",
+    "verwaltung",
+)
+# Ausgezeichnete Rechnungsnummer, z.B. "Rechnungsnr.: GOÄ-2026-101".
+_INVOICE_NUMBER_LABELED_PATTERN = re.compile(
+    r"Rechnungs(?:nr\.?|nummer)\s*[:.\-]?\s*([A-ZÄÖÜ0-9][A-ZÄÖÜ0-9.\-/]{2,})",
+    re.IGNORECASE,
+)
 
 
 def _to_float(raw: str) -> float:
@@ -170,6 +192,32 @@ def _extract_treatment_date(text: str) -> str | None:
     generic = _GENERIC_DATE_PATTERN.search(text)
     if generic:
         return _parse_german_date(generic.group(0))
+    return None
+
+
+def _extract_practice_email(text: str) -> str | None:
+    """Erkennt eine Praxis-/Abrechnungs-E-Mail, bevorzugt im Rechnungskopf."""
+    found = [m.group(0) for m in _EMAIL_PATTERN.finditer(text)]
+    if not found:
+        return None
+    header = "\n".join(text.splitlines()[:12])
+    header_emails = [m.group(0) for m in _EMAIL_PATTERN.finditer(header)]
+    pool = header_emails or found
+    for email in pool:
+        local = email.split("@", 1)[0].lower()
+        if any(token in local for token in _PREFERRED_EMAIL_LOCALS):
+            return email
+    return pool[0]
+
+
+def _extract_invoice_number(text: str) -> str | None:
+    """Erkennt eine Rechnungsnummer, sofern vorhanden."""
+    labeled = _INVOICE_NUMBER_LABELED_PATTERN.search(text)
+    if labeled:
+        return labeled.group(1).strip().rstrip(".")
+    ref = _INVOICE_REFERENCE_PATTERN.search(text)
+    if ref:
+        return ref.group(0).strip()
     return None
 
 
@@ -310,6 +358,8 @@ def parse_invoice_text(text: str) -> ParsedInvoice:
         raw_text=text,
         treatment_date=_extract_treatment_date(sanitized_text),
         praxis_name=_extract_praxis_name(sanitized_text),
+        practice_email=_extract_practice_email(text),
+        invoice_number=_extract_invoice_number(text),
     )
 
 

@@ -132,4 +132,15 @@ class ParseAndValidateResponse(BaseModel):
             "dem clientseitigen Abgleich mit dem Geofencing-Tagebuch."
         ),
     )
+    extracted_practice_email: str | None = Field(
+        None,
+        description=(
+            "Aus dem Rechnungskopf erkannte Praxis-/Abrechnungs-E-Mail, "
+            "sofern vorhanden. Dient als Empfänger für den Einwand."
+        ),
+    )
+    extracted_invoice_number: str | None = Field(
+        None,
+        description="Aus der Rechnung erkannte Rechnungsnummer, sofern vorhanden.",
+    )
     report: ClaimValidationReport

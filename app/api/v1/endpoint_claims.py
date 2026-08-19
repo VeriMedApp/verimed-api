@@ -150,6 +150,8 @@ async def parse_and_validate_claim(
         raw_text_excerpt=parsed.raw_text[:_RAW_TEXT_EXCERPT_LIMIT],
         extracted_treatment_date=parsed.treatment_date,
         extracted_praxis_name=parsed.praxis_name,
+        extracted_practice_email=parsed.practice_email,
+        extracted_invoice_number=parsed.invoice_number,
         report=report,
     )
 
