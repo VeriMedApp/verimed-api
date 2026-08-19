@@ -49,7 +49,9 @@
     z-index: 80;
       max-width: calc(100% - 2rem);
     }
-    .toast-in { animation: toastIn .28s ease-out; }
+    .diary-filter-btn.active { background: #fff; color: #1e40af; box-shadow: 0 1px 2px rgb(15 23 42 / 0.08); }
+    details.diary-archive > summary { list-style: none; cursor: pointer; }
+    details.diary-archive > summary::-webkit-details-marker { display: none; }
     @keyframes toastIn {
       from { opacity: 0; transform: translateY(8px); }
       to { opacity: 1; transform: none; }
@@ -254,12 +256,23 @@
           </span>
           <h2 class="text-base font-bold">Praxis-Tagebuch (Geofencing Logs)</h2>
         </div>
-        <button id="clearGeofenceLogBtn" type="button" class="text-[11px] text-slate-400 underline underline-offset-2 active:text-slate-600 shrink-0">Löschen</button>
       </div>
       <p class="text-xs text-slate-500 mb-3">
         Praxisbesuche werden per Live-Check-in oder Nachtrag auf diesem Gerät gespeichert
         (localStorage) &middot; unabhängig von GOÄ-Ziffern &middot; dient als Aufenthaltsnachweis für später eingehende Rechnungen.
+        Archivierte Einträge bleiben für den Rechnungsabgleich verfügbar.
       </p>
+      <div class="grid grid-cols-3 gap-1 bg-slate-100 rounded-xl p-1 mb-3">
+        <button type="button" id="diaryFilterActive" class="diary-filter-btn active min-h-[40px] rounded-lg text-[11px] font-bold text-slate-500 px-1 leading-tight">
+          📍 Aktive Besuche
+        </button>
+        <button type="button" id="diaryFilterArchive" class="diary-filter-btn min-h-[40px] rounded-lg text-[11px] font-bold text-slate-500 px-1 leading-tight">
+          📦 Archiv
+        </button>
+        <button type="button" id="diaryFilterAll" class="diary-filter-btn min-h-[40px] rounded-lg text-[11px] font-bold text-slate-500 px-1 leading-tight">
+          📋 Alle
+        </button>
+      </div>
       <div id="geofenceLogList" class="space-y-2"></div>
     </section>
   </main>
@@ -330,6 +343,11 @@
       copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
       printer: '<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/>',
       send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
+      archive: '<path d="M10 12h4"/><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/>',
+      trash2: '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
+      clipboardList: '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/>',
+      package: '<path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+      check: '<path d="M20 6 9 17l-5-5"/>',
     };
     function icon(name, cls) {
       return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls || 'h-5 w-5'} shrink-0">${ICON_PATHS[name] || ICON_PATHS.info}</svg>`;
@@ -517,6 +535,7 @@
         accuracy: gps.accuracy,
         timestamp: gps.timestamp,
         auditHash: payload.auditHash || '',
+        archived: false,
         createdAt: Date.now(),
       });
       saveGeofenceLog(entries);
@@ -550,7 +569,7 @@
         return;
       }
       select.innerHTML = entries.map(e => {
-        const label = `${e.praxisName} · ${e.dateDE || formatDateDE(e.dateISO)} · ${e.arrival}–${e.departure} (${e.durationMinutes} Min)`;
+        const label = `${e.praxisName} · ${e.dateDE || formatDateDE(e.dateISO)} · ${e.arrival}–${e.departure} (${e.durationMinutes} Min)${e.archived ? ' · Archiv' : ''}`;
         return `<option value="${e.id}">${label}</option>`;
       }).join('');
       if (prev && entries.some(e => e.id === prev)) select.value = prev;
@@ -560,35 +579,182 @@
       if (!id) return null;
       return loadGeofenceLog().find(e => e.id === id) || null;
     }
+    let diaryFilter = 'active';
+    let pendingDeleteId = null;
+    function isArchivedEntry(entry) {
+      return !!entry?.archived;
+    }
+    function activeDiaryEntries(entries) {
+      return (entries || []).filter(e => !isArchivedEntry(e));
+    }
+    function archivedDiaryEntries(entries) {
+      return (entries || []).filter(e => isArchivedEntry(e));
+    }
+    function patchDiaryEntry(id, patch) {
+      const entries = loadGeofenceLog();
+      const idx = entries.findIndex(e => e.id === id);
+      if (idx < 0) return null;
+      entries[idx] = { ...entries[idx], ...patch };
+      saveGeofenceLog(entries);
+      return entries[idx];
+    }
+    function archiveDiaryEntry(id) {
+      const updated = patchDiaryEntry(id, { archived: true, archivedAt: Date.now() });
+      if (!updated) return;
+      pendingDeleteId = null;
+      diaryFilter = 'active';
+      renderGeofenceLog();
+      showToast('📦 Besuch archiviert — bleibt für den Rechnungsabgleich verfügbar.');
+    }
+    function restoreDiaryEntry(id) {
+      const updated = patchDiaryEntry(id, { archived: false, archivedAt: null });
+      if (!updated) return;
+      pendingDeleteId = null;
+      renderGeofenceLog();
+      showToast('📍 Besuch wieder unter Aktive Besuche.');
+    }
+    function requestDeleteDiaryEntry(id) {
+      pendingDeleteId = id;
+      renderGeofenceLog();
+    }
+    function cancelDeleteDiaryEntry() {
+      pendingDeleteId = null;
+      renderGeofenceLog();
+    }
+    function deleteDiaryEntry(id) {
+      const entries = loadGeofenceLog().filter(e => e.id !== id);
+      saveGeofenceLog(entries);
+      pendingDeleteId = null;
+      renderGeofenceLog();
+      showToast('🗑️ Eintrag gelöscht.');
+    }
+    function setDiaryFilter(filter) {
+      diaryFilter = filter;
+      pendingDeleteId = null;
+      renderGeofenceLog();
+    }
+    function renderDiaryFilterPills(activeCount, archivedCount) {
+      const pills = [
+        ['diaryFilterActive', 'active', `📍 Aktive Besuche`],
+        ['diaryFilterArchive', 'archive', `📦 Archiv (${archivedCount})`],
+        ['diaryFilterAll', 'all', `📋 Alle`],
+      ];
+      pills.forEach(([id, key, label]) => {
+        const btn = $(id);
+        if (!btn) return;
+        btn.textContent = label;
+        btn.classList.toggle('active', diaryFilter === key);
+        btn.classList.toggle('text-brand-700', diaryFilter === key);
+        btn.classList.toggle('text-slate-500', diaryFilter !== key);
+      });
+      void activeCount;
+    }
+    function renderDiaryCard(e) {
+      const verified = isVerifiedGpsProof(e);
+      const archived = isArchivedEntry(e);
+      const confirm = pendingDeleteId === e.id;
+      const gpsBadge = verified
+        ? `<span class="text-[11px] font-bold bg-emerald-50 text-emerald-700 px-2 py-1 rounded-full">🟢 GPS-Beweis</span>`
+        : `<span class="text-[11px] font-bold bg-amber-50 text-amber-800 px-2 py-1 rounded-full">Manuell</span>`;
+      const archiveBadge = archived
+        ? `<span class="text-[11px] font-bold bg-slate-200 text-slate-600 px-2 py-1 rounded-full">Archiv</span>`
+        : '';
+      const hash = e.auditHash
+        ? `<div class="font-mono text-[10px] text-slate-400 break-all mt-1.5 leading-snug">SHA-256 ${e.auditHash}</div>`
+        : '';
+      const gpsLine = verified
+        ? ` · GPS ${Number(e.lat).toFixed(4)}, ${Number(e.lng).toFixed(4)}${e.accuracy != null ? ` ±${Math.round(e.accuracy)}m` : ''}`
+        : ' · ohne GPS-Sensorik';
+      const actions = confirm
+        ? `<div class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 space-y-2">
+            <p class="text-xs font-semibold text-red-700">Diesen Eintrag wirklich löschen?</p>
+            <div class="grid grid-cols-2 gap-2">
+              <button type="button" data-diary-action="cancel-delete" data-id="${e.id}"
+                class="min-h-[40px] rounded-lg bg-white border border-slate-200 text-slate-700 text-xs font-bold">Abbrechen</button>
+              <button type="button" data-diary-action="delete" data-id="${e.id}"
+                class="min-h-[40px] rounded-lg bg-red-600 text-white text-xs font-bold">Löschen</button>
+            </div>
+          </div>`
+        : `<div class="grid grid-cols-1 gap-1.5">
+            ${archived
+              ? `<button type="button" data-diary-action="restore" data-id="${e.id}"
+                  class="min-h-[40px] rounded-lg bg-white border border-slate-200 text-slate-700 text-[11px] font-bold px-2 flex items-center justify-center gap-1.5">
+                  ${icon('mapPin', 'h-3.5 w-3.5')} Wieder aktivieren
+                </button>`
+              : `<button type="button" data-diary-action="archive" data-id="${e.id}"
+                  class="min-h-[40px] rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold px-2 flex items-center justify-center gap-1.5">
+                  ${icon('check', 'h-3.5 w-3.5')} ✅ Als erledigt archivieren
+                </button>`}
+            <button type="button" data-diary-action="ask-delete" data-id="${e.id}"
+              class="min-h-[40px] rounded-lg bg-white border border-slate-200 text-slate-600 text-[11px] font-bold px-2 flex items-center justify-center gap-1.5">
+              ${icon('trash2', 'h-3.5 w-3.5')} 🗑️ Löschen
+            </button>
+          </div>`;
+      return `
+        <div class="text-sm bg-slate-50 border ${archived ? 'border-slate-200' : 'border-slate-100'} rounded-xl px-3 py-2.5 space-y-2" data-diary-id="${e.id}">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <div class="font-semibold text-slate-700 truncate">${e.praxisName}</div>
+              <div class="text-xs text-slate-400">${e.dateDE || formatDateDE(e.dateISO)} &middot; ${e.arrival}–${e.departure} Uhr${e.treatmentStart ? ` · Zimmer ${e.treatmentStart}` : ''}${gpsLine}</div>
+              ${hash}
+            </div>
+            <div class="shrink-0 flex flex-col items-end gap-1">
+              ${gpsBadge}${archiveBadge}
+              <div class="text-xs font-bold bg-brand-50 text-brand-700 px-2 py-1 rounded-full">Aufenthalt: ${e.durationMinutes} Min</div>
+            </div>
+          </div>
+          ${actions}
+        </div>`;
+    }
+    function diaryEmptyState(kind) {
+      if (kind === 'archive') {
+        return `<div class="text-slate-400 text-xs py-4 text-center leading-relaxed">Noch keine archivierten Besuche.<br/>„Als erledigt archivieren” legt Einträge hier ab — sie bleiben für Rechnungen auffindbar.</div>`;
+      }
+      if (kind === 'active') {
+        return `<div class="text-slate-400 text-xs py-4 text-center leading-relaxed">Keine aktiven Besuche.<br/>Live-Check-in oder „In Tagebuch speichern” legt einen Eintrag an.</div>`;
+      }
+      return `<div class="text-slate-400 text-xs py-4 text-center leading-relaxed">Noch keine Besuche erfasst.<br/>Live-Check-in oder „In Tagebuch speichern” legt einen Eintrag an — ohne GOÄ-Ziffern.</div>`;
+    }
     function renderGeofenceLog() {
       const container = $('geofenceLogList');
       const entries = loadGeofenceLog();
+      const active = activeDiaryEntries(entries);
+      const archived = archivedDiaryEntries(entries);
       renderAuditDiarySelect();
+      renderDiaryFilterPills(active.length, archived.length);
       if (!entries.length) {
-        container.innerHTML = `
-          <div class="text-slate-400 text-xs py-4 text-center leading-relaxed">
-            Noch keine Besuche erfasst.<br/>Live-Check-in oder „In Tagebuch speichern” legt einen Eintrag an — ohne GOÄ-Ziffern.
-          </div>`;
+        container.innerHTML = diaryEmptyState('all');
         updateCTAState();
         return;
       }
-      container.innerHTML = entries.slice(0, GEOFENCE_LOG_DISPLAY_LIMIT).map(e => {
-        const verified = isVerifiedGpsProof(e);
-        const badge = verified
-          ? `<div class="shrink-0 text-[11px] font-bold bg-emerald-50 text-emerald-700 px-2 py-1 rounded-full">GPS-Beweis</div>`
-          : `<div class="shrink-0 text-[11px] font-bold bg-amber-50 text-amber-800 px-2 py-1 rounded-full">Manuell</div>`;
-        return `
-        <div class="flex items-center justify-between gap-2 text-sm bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5">
-          <div class="min-w-0">
-            <div class="font-semibold text-slate-700 truncate">${e.praxisName}</div>
-            <div class="text-xs text-slate-400">${e.dateDE || formatDateDE(e.dateISO)} &middot; ${e.arrival}–${e.departure} Uhr${e.treatmentStart ? ` · Zimmer ${e.treatmentStart}` : ''}${verified ? ` · GPS ${Number(e.lat).toFixed(4)}, ${Number(e.lng).toFixed(4)}` : ' · ohne GPS-Sensorik'}</div>
+      if (diaryFilter === 'archive') {
+        container.innerHTML = archived.length
+          ? archived.map(renderDiaryCard).join('')
+          : diaryEmptyState('archive');
+        updateCTAState();
+        return;
+      }
+      if (diaryFilter === 'all') {
+        const grouped = [
+          active.length ? `<div class="text-[11px] font-bold uppercase tracking-wide text-slate-400 px-1">Aktive Besuche</div>` + active.map(renderDiaryCard).join('') : '',
+          archived.length ? `<div class="text-[11px] font-bold uppercase tracking-wide text-slate-400 px-1 pt-1">Archivierte Besuche (${archived.length})</div>` + archived.map(renderDiaryCard).join('') : '',
+        ].filter(Boolean).join('');
+        container.innerHTML = grouped || diaryEmptyState('all');
+        updateCTAState();
+        return;
+      }
+      const activeHtml = active.length ? active.map(renderDiaryCard).join('') : diaryEmptyState('active');
+      const archiveHtml = `
+        <details class="diary-archive rounded-xl border border-slate-200 bg-white" ${pendingDeleteId && archived.some(e => e.id === pendingDeleteId) ? 'open' : ''}>
+          <summary class="px-3 py-2.5 text-sm font-bold text-slate-700 flex items-center justify-between gap-2">
+            <span>📦 Archivierte Besuche (${archived.length})</span>
+            <span class="text-[11px] font-semibold text-slate-400">${archived.length ? 'Aufklappen' : 'leer'}</span>
+          </summary>
+          <div class="px-2 pb-2 space-y-2">
+            ${archived.length ? archived.map(renderDiaryCard).join('') : diaryEmptyState('archive')}
           </div>
-          <div class="shrink-0 flex flex-col items-end gap-1">
-            ${badge}
-            <div class="text-xs font-bold bg-brand-50 text-brand-700 px-2 py-1 rounded-full">Aufenthalt: ${e.durationMinutes} Min</div>
-          </div>
-        </div>`;
-      }).join('');
+        </details>`;
+      container.innerHTML = activeHtml + archiveHtml;
       updateCTAState();
     }
     function normalizePraxisName(name) {
@@ -600,8 +766,8 @@
         .trim();
     }
     function findGeofenceMatch(extractedDateISO, extractedPraxisName, selectedDateISO) {
-      const entries = loadGeofenceLog();
-      if (!entries.length) return null;
+      const all = loadGeofenceLog();
+      if (!all.length) return null;
       const selectedISO = selectedDateISO || selectedTreatmentDateISO();
       const target = normalizePraxisName(extractedPraxisName || $('praxisName')?.value || '');
       const praxisMatch = (e) => {
@@ -610,28 +776,33 @@
         if (!n) return true;
         return n.includes(target) || target.includes(n);
       };
-      // Bevorzugt Eintraege, bei denen OCR-Datum UND gewaehltes
-      // Behandlungsdatum mit dem Tagebuch-Eintrag uebereinstimmen.
-      if (extractedDateISO && selectedISO && extractedDateISO === selectedISO) {
-        const both = entries.find(e => e.dateISO === extractedDateISO && praxisMatch(e));
-        if (both) return both;
-      }
-      if (extractedDateISO) {
-        const byOcr = entries.find(e => e.dateISO === extractedDateISO && praxisMatch(e));
-        if (byOcr) return byOcr;
-      }
-      if (selectedISO) {
-        const bySelected = entries.find(e => e.dateISO === selectedISO && praxisMatch(e));
-        if (bySelected) return bySelected;
-      }
-      const dateKey = extractedDateISO || selectedISO;
-      if (dateKey) {
-        const byDate = entries.find(e => e.dateISO === dateKey);
-        if (byDate) return byDate;
-      }
-      const audit = getSelectedAuditEntry();
-      if (audit) return audit;
-      return entries[0] || null;
+      const search = (entries) => {
+        if (!entries.length) return null;
+        if (extractedDateISO && selectedISO && extractedDateISO === selectedISO) {
+          const both = entries.find(e => e.dateISO === extractedDateISO && praxisMatch(e));
+          if (both) return both;
+        }
+        if (extractedDateISO) {
+          const byOcr = entries.find(e => e.dateISO === extractedDateISO && praxisMatch(e));
+          if (byOcr) return byOcr;
+        }
+        if (selectedISO) {
+          const bySelected = entries.find(e => e.dateISO === selectedISO && praxisMatch(e));
+          if (bySelected) return bySelected;
+        }
+        const dateKey = extractedDateISO || selectedISO;
+        if (dateKey) {
+          const byDate = entries.find(e => e.dateISO === dateKey);
+          if (byDate) return byDate;
+        }
+        return null;
+      };
+      // Aktive Eintraege zuerst, archivierte bleiben fuer spaetere Rechnungen matchbar.
+      return search(activeDiaryEntries(all))
+        || search(archivedDiaryEntries(all))
+        || getSelectedAuditEntry()
+        || all[0]
+        || null;
     }
     function resolveDiaryProof(extractedDateISO, extractedPraxisName) {
       const matched = findGeofenceMatch(extractedDateISO, extractedPraxisName, selectedTreatmentDateISO());
@@ -665,10 +836,19 @@
       }
       return resolveDiaryProof(null, lastObjection?.praxisName || $('praxisName')?.value);
     }
-    $('clearGeofenceLogBtn').addEventListener('click', () => {
-      if (!confirm('Geofencing-Tagebuch auf diesem Gerät wirklich löschen?')) return;
-      saveGeofenceLog([]);
-      renderGeofenceLog();
+    $('diaryFilterActive').addEventListener('click', () => setDiaryFilter('active'));
+    $('diaryFilterArchive').addEventListener('click', () => setDiaryFilter('archive'));
+    $('diaryFilterAll').addEventListener('click', () => setDiaryFilter('all'));
+    $('geofenceLogList').addEventListener('click', (ev) => {
+      const btn = ev.target.closest('[data-diary-action]');
+      if (!btn) return;
+      const id = btn.dataset.id;
+      const action = btn.dataset.diaryAction;
+      if (action === 'archive') archiveDiaryEntry(id);
+      else if (action === 'restore') restoreDiaryEntry(id);
+      else if (action === 'ask-delete') requestDeleteDiaryEntry(id);
+      else if (action === 'cancel-delete') cancelDeleteDiaryEntry();
+      else if (action === 'delete') deleteDiaryEntry(id);
     });
 
     // --- Live-Check-in / Timer ---
