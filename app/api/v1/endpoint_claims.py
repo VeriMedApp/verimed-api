@@ -115,6 +115,7 @@ async def parse_and_validate_claim(
             ziffer=item.ziffer,
             multiplier=item.multiplier,
             justification=item.justification,
+            service_time=item.service_time,
         )
         for item in parsed.ziffern
     ]
@@ -165,5 +166,5 @@ async def list_catalog(
     db: AsyncSession = Depends(get_db),
 ) -> list[GOAZiffer]:
     """Gibt alle im System hinterlegten GOAE-Ziffern zurueck."""
-    result = await db.execute(select(GOAZiffer).order_by(GOAZiffer.ziffer))
+    result = await db.execute(select(GOAZiffer).order_by(GOAZiffer.sort_order, GOAZiffer.ziffer))
     return list(result.scalars().all())

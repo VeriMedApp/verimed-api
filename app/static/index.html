@@ -143,13 +143,20 @@
       <div id="tabManual" class="hidden space-y-3">
         <div>
           <h3 class="text-sm font-bold text-slate-800">GOÄ-Ziffern manuell prüfen</h3>
-          <p class="text-xs text-slate-500 mt-0.5">Ziffer antippen zum Auswählen. Faktor &gt; 2,3 erfordert eine Begründung. Die Zeitprüfung nutzt einen gespeicherten Praxisbesuch aus dem Tagebuch.</p>
+          <p class="text-xs text-slate-500 mt-0.5">Alle gängigen Ziffern und Zuschläge auswählen. Persönlich: Begründung ab 2,3× (max. 3,5×). Technisch: Begründung ab 1,8× (max. 2,5×). Zuschläge sind fest 1,0×. Die Zeitprüfung nutzt die Summe der Mindestdauern gegen Ihren Tagebuch-Eintrag.</p>
         </div>
         <div>
           <label for="auditDiarySelect" class="block text-xs font-medium text-slate-500 mb-1">Prüfen gegen Tagebuch-Eintrag</label>
           <select id="auditDiarySelect"
             class="w-full text-sm rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 focus:ring-2 focus:ring-brand-500 outline-none">
             <option value="">Kein Eintrag vorhanden</option>
+          </select>
+        </div>
+        <div>
+          <label for="goaQuickAdd" class="block text-xs font-medium text-slate-500 mb-1">Ziffer schnell auswählen</label>
+          <select id="goaQuickAdd"
+            class="w-full text-sm rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 focus:ring-2 focus:ring-brand-500 outline-none">
+            <option value="">Katalog durchsuchen …</option>
           </select>
         </div>
         <div id="zifferList" class="space-y-2.5">
@@ -429,6 +436,41 @@
     let attachedPhotoName = '';
     let detectedPracticeEmail = '';
     let lastObjection = null;
+
+    const GOA_CATEGORY_META = {
+      personal: { title: 'Persönliche Leistungen', hint: 'Schwellenwert 2,3× · Höchstsatz 3,5×' },
+      technical: { title: 'Medizinisch-technische Leistungen', hint: 'Schwellenwert 1,8× · Höchstsatz 2,5×' },
+      surcharge: { title: 'Unzeit- & Notfall-Zuschläge', hint: 'Festbetrag, ungesteigert 1,0×' },
+    };
+
+    const GOA_CATALOG = [
+      { ziffer:'1', title_official:'Beratung, auch mittels Fernsprecher', title_patient:'Kurzes Beratungsgespräch mit dem Arzt.', rule_time_minutes:0, exclusion_ziffern:['3'], category:'personal', threshold_multiplier:2.3, max_multiplier:3.5, fee_simple:4.66, fee_threshold:10.72, fee_max:16.32, max_per_session:null, sort_order:10 },
+      { ziffer:'3', title_official:'Eingehende Beratung (Dauer mindestens 10 Minuten)', title_patient:'Ausführliches Beratungsgespräch von mindestens 10 Minuten.', rule_time_minutes:10, exclusion_ziffern:['1'], category:'personal', threshold_multiplier:2.3, max_multiplier:3.5, fee_simple:8.74, fee_threshold:20.11, fee_max:30.48, max_per_session:null, sort_order:20 },
+      { ziffer:'4', title_official:'Fremdanamnese / Unterweisung der Bezugspersonen', title_patient:'Gespräch mit Angehörigen oder Bezugspersonen.', rule_time_minutes:0, exclusion_ziffern:[], category:'personal', threshold_multiplier:2.3, max_multiplier:3.5, fee_simple:12.82, fee_threshold:29.49, fee_max:44.88, max_per_session:null, sort_order:30 },
+      { ziffer:'34', title_official:'Erörterung einer lebensverändernden Erkrankung (mind. 20 Min.)', title_patient:'Ausführliches Gespräch über eine schwerwiegende Diagnose, mindestens 20 Minuten.', rule_time_minutes:20, exclusion_ziffern:[], category:'personal', threshold_multiplier:2.3, max_multiplier:3.5, fee_simple:17.49, fee_threshold:40.22, fee_max:61.20, max_per_session:null, sort_order:40 },
+      { ziffer:'5', title_official:'Symptombezogene Untersuchung', title_patient:'Körperliche Untersuchung bezogen auf Ihre aktuellen Beschwerden.', rule_time_minutes:0, exclusion_ziffern:['7','8'], category:'personal', threshold_multiplier:2.3, max_multiplier:3.5, fee_simple:4.66, fee_threshold:10.72, fee_max:16.32, max_per_session:null, sort_order:50 },
+      { ziffer:'7', title_official:'Untersuchung eines Organsystems', title_patient:'Gründliche Untersuchung eines Organsystems.', rule_time_minutes:0, exclusion_ziffern:['5'], category:'personal', threshold_multiplier:2.3, max_multiplier:3.5, fee_simple:9.33, fee_threshold:21.45, fee_max:32.64, max_per_session:null, sort_order:60 },
+      { ziffer:'8', title_official:'Ganzkörperstatus', title_patient:'Vollständige körperliche Untersuchung, mindestens 20 Minuten.', rule_time_minutes:20, exclusion_ziffern:['5'], category:'personal', threshold_multiplier:2.3, max_multiplier:3.5, fee_simple:14.57, fee_threshold:33.52, fee_max:51.00, max_per_session:null, sort_order:70 },
+      { ziffer:'11', title_official:'Rektale Untersuchung', title_patient:'Tastuntersuchung des Enddarms (rektale Untersuchung).', rule_time_minutes:0, exclusion_ziffern:[], category:'personal', threshold_multiplier:2.3, max_multiplier:3.5, fee_simple:5.25, fee_threshold:12.07, fee_max:18.36, max_per_session:null, sort_order:80 },
+      { ziffer:'50', title_official:'Hausbesuch', title_patient:'Hausbesuch durch den Arzt.', rule_time_minutes:0, exclusion_ziffern:[], category:'personal', threshold_multiplier:2.3, max_multiplier:3.5, fee_simple:18.65, fee_threshold:42.90, fee_max:65.28, max_per_session:null, sort_order:90 },
+      { ziffer:'60', title_official:'Konsiliarische Erörterung', title_patient:'Fachlicher Austausch des Arztes mit einem anderen Arzt zu Ihrem Fall.', rule_time_minutes:0, exclusion_ziffern:[], category:'personal', threshold_multiplier:2.3, max_multiplier:3.5, fee_simple:9.33, fee_threshold:21.45, fee_max:32.64, max_per_session:null, sort_order:100 },
+      { ziffer:'70', title_official:'Kurze Bescheinigung / Attest', title_patient:'Kurzes Attest oder kurze Bescheinigung.', rule_time_minutes:0, exclusion_ziffern:[], category:'personal', threshold_multiplier:2.3, max_multiplier:3.5, fee_simple:2.33, fee_threshold:5.36, fee_max:8.16, max_per_session:null, sort_order:110 },
+      { ziffer:'75', title_official:'Ausführlicher schriftlicher Befundbericht', title_patient:'Ausführlicher schriftlicher Befund- oder Arztbrief.', rule_time_minutes:0, exclusion_ziffern:[], category:'personal', threshold_multiplier:2.3, max_multiplier:3.5, fee_simple:7.58, fee_threshold:17.43, fee_max:26.52, max_per_session:null, sort_order:120 },
+      { ziffer:'200', title_official:'Verband', title_patient:'Anlegen eines Verbandes.', rule_time_minutes:0, exclusion_ziffern:['2006','250'], category:'technical', threshold_multiplier:1.8, max_multiplier:2.5, fee_simple:2.62, fee_threshold:4.72, fee_max:6.56, max_per_session:null, sort_order:200 },
+      { ziffer:'250', title_official:'Blutentnahme', title_patient:'Abnahme einer Blutprobe aus der Vene.', rule_time_minutes:0, exclusion_ziffern:['200','204','252'], category:'technical', threshold_multiplier:1.8, max_multiplier:2.5, fee_simple:2.33, fee_threshold:4.20, fee_max:5.83, max_per_session:null, sort_order:210 },
+      { ziffer:'252', title_official:'Injektion s.c./i.m.', title_patient:'Spritze unter die Haut oder in den Muskel.', rule_time_minutes:0, exclusion_ziffern:['250'], category:'technical', threshold_multiplier:1.8, max_multiplier:2.5, fee_simple:2.33, fee_threshold:4.20, fee_max:5.83, max_per_session:null, sort_order:220 },
+      { ziffer:'271', title_official:'Intravenöse Infusion bis 30 Min.', title_patient:'Venöse Infusion von bis zu 30 Minuten.', rule_time_minutes:0, exclusion_ziffern:[], category:'technical', threshold_multiplier:1.8, max_multiplier:2.5, fee_simple:5.83, fee_threshold:10.49, fee_max:14.57, max_per_session:null, sort_order:230 },
+      { ziffer:'410', title_official:'Ultraschalluntersuchung eines Organs', title_patient:'Ultraschalluntersuchung eines Organs.', rule_time_minutes:0, exclusion_ziffern:[], category:'technical', threshold_multiplier:1.8, max_multiplier:2.5, fee_simple:16.32, fee_threshold:29.38, fee_max:40.80, max_per_session:null, sort_order:240 },
+      { ziffer:'420', title_official:'Ultraschall jedes weiteren Organs', title_patient:'Ultraschall jedes weiteren Organs (höchstens dreimal je Sitzung).', rule_time_minutes:0, exclusion_ziffern:[], category:'technical', threshold_multiplier:1.8, max_multiplier:2.5, fee_simple:5.83, fee_threshold:10.49, fee_max:14.57, max_per_session:3, sort_order:250 },
+      { ziffer:'650', title_official:'Ruhe-EKG Standard', title_patient:'Ruhe-EKG (Herzstromkurve in Ruhe).', rule_time_minutes:0, exclusion_ziffern:[], category:'technical', threshold_multiplier:1.8, max_multiplier:2.5, fee_simple:14.75, fee_threshold:26.54, fee_max:36.87, max_per_session:null, sort_order:260 },
+      { ziffer:'651', title_official:'Belastungs-EKG / Ergometrie', title_patient:'Belastungs-EKG / Ergometrie.', rule_time_minutes:0, exclusion_ziffern:[], category:'technical', threshold_multiplier:1.8, max_multiplier:2.5, fee_simple:33.22, fee_threshold:59.80, fee_max:83.06, max_per_session:null, sort_order:270 },
+      { ziffer:'2006', title_official:'Behandlung einer infizierten Wunde', title_patient:'Behandlung einer infizierten oder schlecht heilenden Wunde.', rule_time_minutes:0, exclusion_ziffern:['200'], category:'technical', threshold_multiplier:1.8, max_multiplier:2.5, fee_simple:7.87, fee_threshold:14.16, fee_max:19.67, max_per_session:null, sort_order:280 },
+      { ziffer:'A', title_official:'Zuschlag A – außerhalb der Sprechstunde', title_patient:'Zuschlag für Behandlung außerhalb der Sprechstunde.', rule_time_minutes:0, exclusion_ziffern:[], category:'surcharge', threshold_multiplier:1.0, max_multiplier:1.0, fee_simple:4.08, fee_threshold:4.08, fee_max:4.08, max_per_session:null, sort_order:400 },
+      { ziffer:'B', title_official:'Zuschlag B – Spätbereich 20–22 / 06–08 Uhr', title_patient:'Zuschlag für Behandlung im Spätbereich (20–22 Uhr bzw. 6–8 Uhr).', rule_time_minutes:0, exclusion_ziffern:[], category:'surcharge', threshold_multiplier:1.0, max_multiplier:1.0, fee_simple:10.49, fee_threshold:10.49, fee_max:10.49, max_per_session:null, sort_order:410 },
+      { ziffer:'C', title_official:'Zuschlag C – Nachtbereich 22–06 Uhr', title_patient:'Zuschlag für Behandlung in der Nacht (22–6 Uhr).', rule_time_minutes:0, exclusion_ziffern:[], category:'surcharge', threshold_multiplier:1.0, max_multiplier:1.0, fee_simple:18.65, fee_threshold:18.65, fee_max:18.65, max_per_session:null, sort_order:420 },
+      { ziffer:'D', title_official:'Zuschlag D – Samstags, Sonn- und Feiertage', title_patient:'Zuschlag für Behandlung an Samstagen, Sonn- oder Feiertagen.', rule_time_minutes:0, exclusion_ziffern:[], category:'surcharge', threshold_multiplier:1.0, max_multiplier:1.0, fee_simple:12.82, fee_threshold:12.82, fee_max:12.82, max_per_session:null, sort_order:430 },
+      { ziffer:'K1', title_official:'Zuschlag K1 – Kleinkinder bis 4 Jahre', title_patient:'Zuschlag für die Behandlung von Kleinkindern bis 4 Jahre.', rule_time_minutes:0, exclusion_ziffern:[], category:'surcharge', threshold_multiplier:1.0, max_multiplier:1.0, fee_simple:6.99, fee_threshold:6.99, fee_max:6.99, max_per_session:null, sort_order:440 },
+    ];
 
     const $ = (id) => document.getElementById(id);
 
@@ -1187,36 +1229,125 @@
     }
 
     // --- Load catalog (manual tab) ---
-    const PRESET_FACTORS = [1.0, 1.8, 2.3, 3.5];
+    function zifferLabel(ziffer) {
+      const z = String(ziffer || '');
+      if (/^(A|B|C|D|K1)$/i.test(z)) return 'Zuschlag ' + z.toUpperCase();
+      return 'GOÄ ' + z;
+    }
+    function catalogEntry(ziffer) {
+      return catalog.find(z => z.ziffer === ziffer) || GOA_CATALOG.find(z => z.ziffer === ziffer) || null;
+    }
+    function defaultFactor(z) {
+      if (!z) return 2.3;
+      if (z.category === 'surcharge') return 1.0;
+      return Number(z.threshold_multiplier) || 2.3;
+    }
+    function presetFactors(z) {
+      if (z?.category === 'surcharge') return [1.0];
+      if (z?.category === 'technical') return [1.0, 1.8, 2.5];
+      return [1.0, 2.3, 3.5];
+    }
+    function formatFee(amount) {
+      const n = Number(amount);
+      if (!Number.isFinite(n)) return '–';
+      return n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+    }
+    function mergeCatalog(apiItems) {
+      const localByZ = Object.fromEntries(GOA_CATALOG.map(z => [z.ziffer, z]));
+      const merged = [];
+      const seen = new Set();
+      for (const item of apiItems || []) {
+        merged.push({ ...(localByZ[item.ziffer] || {}), ...item });
+        seen.add(item.ziffer);
+      }
+      for (const z of GOA_CATALOG) {
+        if (!seen.has(z.ziffer)) merged.push(z);
+      }
+      merged.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+      return merged;
+    }
+    function fillGoaQuickAdd() {
+      const sel = $('goaQuickAdd');
+      if (!sel) return;
+      const previous = sel.value;
+      sel.innerHTML = '<option value="">Katalog durchsuchen …</option>' + catalog.map(z => {
+        const min = z.rule_time_minutes ? ` · ${z.rule_time_minutes} Min.` : '';
+        return `<option value="${z.ziffer}">${zifferLabel(z.ziffer)} – ${z.title_patient}${min}</option>`;
+      }).join('');
+      sel.value = previous || '';
+    }
+    function quickAddGoa(ziffer) {
+      if (!ziffer) return;
+      const chk = $('chk_' + ziffer);
+      if (chk) {
+        chk.checked = true;
+        onToggleZiffer(ziffer);
+        $('card_' + ziffer)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      if ($('goaQuickAdd')) $('goaQuickAdd').value = '';
+    }
 
     async function loadCatalog() {
       const list = $('zifferList');
       try {
         const r = await fetch(API + '/catalog');
         if (!r.ok) throw new Error('HTTP ' + r.status);
-        catalog = await r.json();
-        if (!catalog.length) { list.innerHTML = '<div class="text-slate-400 text-sm py-6 text-center">Katalog ist leer.</div>'; return; }
-        list.innerHTML = catalog.map(z => renderZifferCard(z)).join('');
-        catalog.forEach(z => {
-          $('mul_' + z.ziffer).addEventListener('input', () => onMultiplierChange(z.ziffer));
-        });
-        updateCTAState();
+        catalog = mergeCatalog(await r.json());
       } catch (e) {
-        list.innerHTML = `<div class="text-red-500 text-sm py-6 text-center">Katalog konnte nicht geladen werden (${e.message}).</div>`;
+        catalog = GOA_CATALOG.slice();
+        console.warn('Katalog-API nicht erreichbar, nutze lokalen GOA_CATALOG.', e);
       }
+      if (!catalog.length) {
+        list.innerHTML = '<div class="text-slate-400 text-sm py-6 text-center">Katalog ist leer.</div>';
+        return;
+      }
+      list.innerHTML = renderCatalogGroups();
+      catalog.forEach(z => {
+        $('mul_' + z.ziffer)?.addEventListener('input', () => onMultiplierChange(z.ziffer));
+      });
+      fillGoaQuickAdd();
+      $('goaQuickAdd')?.addEventListener('change', (ev) => quickAddGoa(ev.target.value));
+      updateCTAState();
+    }
+
+    function renderCatalogGroups() {
+      const order = ['personal', 'technical', 'surcharge'];
+      return order.map(key => {
+        const items = catalog.filter(z => z.category === key);
+        if (!items.length) return '';
+        const meta = GOA_CATEGORY_META[key] || { title: key, hint: '' };
+        return `<div class="space-y-2.5">
+          <div class="pt-1">
+            <div class="text-[11px] font-extrabold uppercase tracking-wide text-slate-700">${meta.title}</div>
+            <div class="text-[10px] text-slate-400">${meta.hint}</div>
+          </div>
+          ${items.map(z => renderZifferCard(z)).join('')}
+        </div>`;
+      }).join('<div class="h-2"></div>');
     }
 
     function renderZifferCard(z) {
+      const factor = defaultFactor(z);
+      const duration = z.rule_time_minutes
+        ? `<span class="text-xs text-slate-400">mind. ${z.rule_time_minutes} min</span>`
+        : (z.category === 'surcharge'
+          ? `<span class="text-xs text-slate-400">Fest ${formatFee(z.fee_simple)}</span>`
+          : `<span class="text-xs text-slate-400">1,0× ${formatFee(z.fee_simple)}</span>`);
+      const feeLine = z.category === 'surcharge'
+        ? `Festbetrag ${formatFee(z.fee_simple)} (1,0×)`
+        : `1,0× ${formatFee(z.fee_simple)} · ${formatMultiplierDE(z.threshold_multiplier)}× ${formatFee(z.fee_threshold)} · ${formatMultiplierDE(z.max_multiplier)}× ${formatFee(z.fee_max)}`;
+      const extra = z.max_per_session ? ` · max. ${z.max_per_session}× je Sitzung` : '';
       return `
         <div id="card_${z.ziffer}" class="rounded-2xl border-2 border-slate-200 overflow-hidden transition">
           <label class="flex items-center gap-3 p-3 active:bg-slate-50 cursor-pointer">
             <input id="chk_${z.ziffer}" type="checkbox" class="h-5 w-5 rounded text-brand-600 focus:ring-brand-500 shrink-0" onchange="onToggleZiffer('${z.ziffer}')" />
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 flex-wrap">
-                <span class="text-xs font-bold bg-slate-800 text-white px-2 py-0.5 rounded">Ziffer ${z.ziffer}</span>
-                <span class="text-xs text-slate-400">${z.rule_time_minutes} min</span>
+                <span class="text-xs font-bold bg-slate-800 text-white px-2 py-0.5 rounded">${zifferLabel(z.ziffer)}</span>
+                ${duration}
               </div>
               <div class="text-sm font-semibold text-slate-700 mt-1">${z.title_patient}</div>
+              <div class="text-[11px] text-slate-400 mt-0.5">${feeLine}${extra}</div>
             </div>
           </label>
           <details class="border-t border-slate-100 px-3 py-2">
@@ -1225,18 +1356,21 @@
           </details>
           <div class="border-t border-slate-100 px-3 py-3 bg-slate-50/60">
             <div class="flex items-center justify-between gap-2 mb-2">
-              <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Steigerungsfaktor</span>
-              <input id="mul_${z.ziffer}" type="number" step="0.1" min="0.1" value="2.3"
+              <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">${z.category === 'surcharge' ? 'Fester Satz' : 'Steigerungsfaktor'}</span>
+              <input id="mul_${z.ziffer}" type="number" step="0.1" min="0.1" value="${factor}"
                 class="w-20 text-right rounded-lg border border-slate-300 px-2 py-1.5 text-sm font-bold focus:ring-2 focus:ring-brand-500 outline-none" />
             </div>
             <div class="flex gap-1.5 flex-wrap">
-              ${PRESET_FACTORS.map(f => `<button type="button" class="factorPresetBtn text-xs font-bold px-2.5 py-1 rounded-full bg-white border border-slate-200 active:scale-95 transition" onclick="setPresetFactor('${z.ziffer}', ${f})">${f.toFixed(1)}×</button>`).join('')}
+              ${presetFactors(z).map(f => `<button type="button" class="factorPresetBtn text-xs font-bold px-2.5 py-1 rounded-full bg-white border border-slate-200 active:scale-95 transition" onclick="setPresetFactor('${z.ziffer}', ${f})">${f.toFixed(1)}×</button>`).join('')}
             </div>
             <div id="justWrap_${z.ziffer}" class="hidden mt-2.5">
               <label class="text-[11px] font-bold text-red-600 flex items-center gap-1 mb-1">${icon('alertTriangle', 'h-3.5 w-3.5')} Medizinische Begründung erforderlich</label>
               <textarea id="just_${z.ziffer}" rows="2" placeholder="z.B. besonders schwieriger / zeitaufwändiger Behandlungsverlauf …"
                 class="w-full text-sm rounded-lg border border-red-200 bg-red-50/50 px-2.5 py-2 focus:ring-2 focus:ring-red-400 outline-none"
                 oninput="updateCTAState()"></textarea>
+            </div>
+            <div id="illegalWrap_${z.ziffer}" class="hidden mt-2.5 text-[11px] font-bold text-red-700 bg-red-50 border border-red-200 rounded-lg px-2.5 py-2">
+              🚨 Unzulässiger Überschreitungsfaktor (§ 2 GOÄ)
             </div>
           </div>
         </div>`;
@@ -1253,7 +1387,19 @@
     }
     function onMultiplierChange(ziffer) {
       const val = parseFloat($('mul_' + ziffer).value) || 0;
-      $('justWrap_' + ziffer).classList.toggle('hidden', val <= 2.3);
+      const z = catalogEntry(ziffer);
+      const threshold = Number(z?.threshold_multiplier ?? 2.3);
+      const maxFactor = Number(z?.max_multiplier ?? 3.5);
+      const justWrap = $('justWrap_' + ziffer);
+      const illegalWrap = $('illegalWrap_' + ziffer);
+      if (z?.category === 'surcharge') {
+        justWrap?.classList.add('hidden');
+        illegalWrap?.classList.toggle('hidden', Math.abs(val - 1) <= 0.05);
+      } else {
+        const overMax = val > maxFactor + 1e-6;
+        illegalWrap?.classList.toggle('hidden', !overMax);
+        justWrap?.classList.toggle('hidden', overMax || val <= threshold + 1e-6);
+      }
       updateCTAState();
     }
 
@@ -1538,7 +1684,7 @@
     const ANOMALY_META = {
       time_anomaly: { icon: 'clock', label: 'Zeit-Konflikt' },
       exclusion_anomaly: { icon: 'ban', label: 'Ausschluss-Konflikt' },
-      multiplier_anomaly: { icon: 'fileWarning', label: 'Unbegründeter Höchstsatz' },
+      multiplier_anomaly: { icon: 'fileWarning', label: 'Steigerungsfaktor' },
       unknown_ziffer: { icon: 'helpCircle', label: 'Unbekannte Ziffer' },
     };
 
@@ -1696,10 +1842,11 @@
     }
     function formatAnomalyBullet(a, data, geofenceMatch) {
       if (a.type === 'multiplier_anomaly') {
-        const z = (a.related_ziffern || []).join(', ') || '–';
+        const z = (a.related_ziffern || []).map(zifferLabel).join(', ') || '–';
+        if (a.message) return `${z}: ${a.message}`;
         const detail = (data.ziffer_details || []).find(d => (a.related_ziffern || []).includes(d.ziffer));
         const mul = detail ? formatMultiplierDE(detail.multiplier) : '';
-        return `Ziffer ${z}: ${mul}x ohne Begründung`;
+        return `${z}: ${mul}x ohne Begründung`;
       }
       if (a.type === 'time_anomaly') {
         const arr = geofenceMatch?.arrival || '';
@@ -1707,10 +1854,11 @@
         const actual = geofenceMatch?.durationMinutes ?? Math.round(data.actual_duration_minutes);
         const req = Math.round(data.required_treatment_time_minutes);
         const range = (arr && dep) ? ` von ${arr} bis ${dep} Uhr` : '';
-        return `Zeit-Konflikt: ${req} Min. gefordert vs. ${actual} Min. Geofencing-Anwesenheit${range}`;
+        return `Zeit-Konflikt: Physische Unmöglichkeit der Leistungserbringung (${req} Min. gefordert vs. ${actual} Min. Geofencing-Anwesenheit${range})`;
       }
       if (a.type === 'exclusion_anomaly') {
-        const z = (a.related_ziffern || []).map(x => 'Ziffer ' + x).join(' und ');
+        if (a.message) return a.message;
+        const z = (a.related_ziffern || []).map(zifferLabel).join(' und ');
         return `Ausschluss-Konflikt: ${z} dürfen nicht gemeinsam abgerechnet werden`;
       }
       return a.message;
@@ -2329,7 +2477,7 @@ td.num, th.num { text-align: right; white-space: nowrap; }
             <div class="font-bold tabular-nums text-lg">${data.actual_duration_minutes} min</div>
           </div>
           <div class="bg-white rounded-xl p-3 border border-slate-100">
-            <div class="text-slate-400 text-xs">Benötigt (+${data.time_tolerance_minutes} min Toleranz)</div>
+            <div class="text-slate-400 text-xs">Mindest-Behandlungsdauer</div>
             <div class="font-bold tabular-nums text-lg">${data.required_treatment_time_minutes} min</div>
           </div>
         </div>`;
@@ -2348,7 +2496,7 @@ td.num, th.num { text-align: right; white-space: nowrap; }
               <div class="flex items-center gap-2 mb-1">
                 <span class="${critical ? 'text-red-600' : 'text-amber-600'}">${icon(meta.icon, 'h-5 w-5')}</span>
                 <span class="font-bold text-sm ${critical ? 'text-red-700' : 'text-amber-700'}">${meta.label}</span>
-                ${a.related_ziffern?.length ? `<span class="text-[11px] text-slate-500 ml-auto">${a.related_ziffern.map(z => 'Ziffer ' + z).join(', ')}</span>` : ''}
+                ${a.related_ziffern?.length ? `<span class="text-[11px] text-slate-500 ml-auto">${a.related_ziffern.map(zifferLabel).join(', ')}</span>` : ''}
               </div>
               <p class="text-sm text-slate-600 leading-snug">${a.message}</p>
             </div>`;
@@ -2431,13 +2579,13 @@ td.num, th.num { text-align: right; white-space: nowrap; }
       return `
         <details class="fade-in rounded-2xl border border-slate-200 bg-white overflow-hidden">
           <summary class="flex items-center gap-2 p-3 cursor-pointer select-none list-none">
-            <span class="text-xs font-bold ${d.known ? 'bg-slate-800' : 'bg-amber-500'} text-white px-2 py-0.5 rounded shrink-0">${d.ziffer}</span>
+            <span class="text-xs font-bold ${d.known ? 'bg-slate-800' : 'bg-amber-500'} text-white px-2 py-0.5 rounded shrink-0">${zifferLabel(d.ziffer)}</span>
             <span class="flex-1 text-sm font-medium text-slate-700 truncate">${d.title_patient || 'Im Katalog nicht gefunden'}</span>
             ${factorBadge}
           </summary>
           <div class="px-3 pb-3 pt-1 border-t border-slate-100 space-y-1.5">
             <p class="text-xs text-slate-500">${d.title_official || 'Keine offizielle Beschreibung verfügbar.'}</p>
-            ${d.rule_time_minutes != null ? `<p class="text-xs text-slate-400">Regelzeit: ${d.rule_time_minutes} min</p>` : ''}
+            ${d.rule_time_minutes ? `<p class="text-xs text-slate-400">Mindestzeit: ${d.rule_time_minutes} min</p>` : ''}
             ${d.justification
               ? `<p class="text-xs bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-2 text-slate-600"><span class="font-semibold">Begründung:</span> ${d.justification}</p>`
               : (flagged ? `<p class="text-xs bg-red-50 border border-red-100 rounded-lg px-2.5 py-2 text-red-600 font-medium">Keine Begründung angegeben.</p>` : '')}

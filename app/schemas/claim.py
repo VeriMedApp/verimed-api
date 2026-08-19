@@ -14,14 +14,21 @@ class BilledZiffer(BaseModel):
 
     ziffer: str = Field(..., description="GOAE-Ziffer, z.B. '1'.")
     multiplier: float = Field(
-        2.3, gt=0, description="Steigerungsfaktor, z.B. 1.0, 2.3 oder 3.5."
+        2.3, gt=0, description="Steigerungsfaktor, z.B. 1.0, 1.8, 2.3 oder 3.5."
     )
     justification: str | None = Field(
         None,
         description=(
             "Schriftliche medizinische Begruendung fuer einen erhoehten "
-            "Steigerungsfaktor (> 2,3-fach), wie sie auf der Rechnung "
-            "vermerkt sein muss."
+            "Steigerungsfaktor (ueber dem kategoriespezifischen Schwellenwert), "
+            "wie sie auf der Rechnung vermerkt sein muss."
+        ),
+    )
+    service_time: str | None = Field(
+        None,
+        description=(
+            "Optionale Uhrzeit der Leistung (HH:MM), relevant fuer "
+            "Kombinationsverbote wie GOAE 1 + 3 am selben Tag."
         ),
     )
 

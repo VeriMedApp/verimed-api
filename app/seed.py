@@ -1,8 +1,8 @@
 """Seed-Logik fuer den GOAE-Katalog.
 
-Befuellt die Datenbank idempotent mit einem Satz Standard-Ziffern, damit die
-Validierungs-Engine sofort getestet werden kann. Kann sowohl beim
-Anwendungsstart als auch als eigenstaendiges Skript ausgefuehrt werden:
+Befuellt die Datenbank idempotent mit dem kanonischen Katalog aus
+``app.goa_catalog`` und aktualisiert bestehende Eintraege, damit Regelzeiten,
+Ausschluesse und Kategorien nicht auf veralteten Seed-Daten stehen bleiben.
 
     python -m app.seed
 """
@@ -12,66 +12,54 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from sqlalchemy import select
-
 from app.database import AsyncSessionLocal, init_db
+from app.goa_catalog import GOA_CATALOG
 from app.models.goa import GOAZiffer
 
 logger = logging.getLogger(__name__)
 
-# Standard-GOAE-Ziffern fuer Tests und lokale Entwicklung.
-SEED_ZIFFERN: list[dict[str, object]] = [
-    {
-        "ziffer": "1",
-        "title_official": "Beratung, auch mittels Fernsprecher",
-        "title_patient": "Kurzes Beratungsgespraech mit dem Arzt.",
-        "rule_time_minutes": 10,
-        "exclusion_ziffern": [],
-    },
-    {
-        "ziffer": "3",
-        "title_official": "Eingehende Beratung (Dauer mindestens 10 Minuten)",
-        "title_patient": "Ausfuehrliches Beratungsgespraech von mehr als 10 Minuten.",
-        "rule_time_minutes": 20,
-        "exclusion_ziffern": ["1"],
-    },
-    {
-        "ziffer": "5",
-        "title_official": "Symptombezogene Untersuchung",
-        "title_patient": "Koerperliche Untersuchung bezogen auf Ihre Beschwerden.",
-        "rule_time_minutes": 15,
-        "exclusion_ziffern": [],
-    },
-    {
-        "ziffer": "250",
-        "title_official": "Blutentnahme mittels Spritze oder Kanuele",
-        "title_patient": "Abnahme einer Blutprobe.",
-        "rule_time_minutes": 5,
-        "exclusion_ziffern": [],
-    },
-    {
-        "ziffer": "8",
-        "title_official": "Untersuchung zur Erhebung des Ganzkoerperstatus",
-        "title_patient": "Vollstaendige koerperliche Untersuchung (Ganzkoerper).",
-        "rule_time_minutes": 30,
-        "exclusion_ziffern": ["5"],
-    },
-]
+_MODEL_FIELDS = (
+    "ziffer",
+    "title_official",
+    "title_patient",
+    "rule_time_minutes",
+    "exclusion_ziffern",
+    "category",
+    "threshold_multiplier",
+    "max_multiplier",
+    "fee_simple",
+    "fee_threshold",
+    "fee_max",
+    "max_per_session",
+    "sort_order",
+)
+
+
+def _row_payload(data: dict) -> dict:
+    return {key: data.get(key) for key in _MODEL_FIELDS}
 
 
 async def seed_goa_catalog() -> int:
-    """Fuegt fehlende Standard-Ziffern hinzu. Gibt die Zahl neuer Eintraege zurueck."""
+    """Fuegt fehlende Ziffern hinzu und aktualisiert vorhandene. Gibt die Zahl neuer Eintraege zurueck."""
     inserted = 0
+    updated = 0
     async with AsyncSessionLocal() as session:
-        for data in SEED_ZIFFERN:
-            existing = await session.get(GOAZiffer, data["ziffer"])
-            if existing is not None:
+        for data in GOA_CATALOG:
+            payload = _row_payload(data)
+            existing = await session.get(GOAZiffer, payload["ziffer"])
+            if existing is None:
+                session.add(GOAZiffer(**payload))
+                inserted += 1
                 continue
-            session.add(GOAZiffer(**data))
-            inserted += 1
-        if inserted:
-            await session.commit()
-    logger.info("Seed abgeschlossen: %d neue GOAE-Ziffern hinzugefuegt.", inserted)
+            for key, value in payload.items():
+                setattr(existing, key, value)
+            updated += 1
+        await session.commit()
+    logger.info(
+        "Seed abgeschlossen: %d neue, %d aktualisierte GOAE-Ziffern.",
+        inserted,
+        updated,
+    )
     return inserted
 
 

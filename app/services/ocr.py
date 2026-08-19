@@ -22,6 +22,8 @@ import re
 from dataclasses import dataclass, field
 from datetime import date
 
+from app.goa_catalog import default_multiplier, is_surcharge, lookup, normalize_ziffer
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -55,7 +57,7 @@ class OCREngineUnavailableError(OCRError):
 SUPPORTED_IMAGE_TYPES = {"image/jpeg", "image/jpg", "image/png"}
 SUPPORTED_PDF_TYPES = {"application/pdf"}
 
-# GOAE-Regelhoechstsatz ohne gesonderte Begruendung (siehe auch validator.py).
+# Fallback, falls die Ziffer nicht im Katalog steht (persoenliche Leistung).
 DEFAULT_MULTIPLIER = 2.3
 
 
@@ -66,6 +68,7 @@ class ParsedZiffer:
     ziffer: str
     multiplier: float = DEFAULT_MULTIPLIER
     justification: str | None = None
+    service_time: str | None = None
     raw_line: str = ""
 
 
@@ -86,11 +89,18 @@ class ParsedInvoice:
 
 
 # --- Regex-Heuristiken --------------------------------------------------------
-# Erkennt z.B. "Ziffer 1", "Ziff. 5", "GOÄ 3", "GOA 250", "Nr. 250".
+# Erkennt z.B. "GOÄ 1", "GOÄ 3", "Ziffer 410", "Ziff. 5", "GOA 250",
+# "Nr. 250", "GOÄ 2006".
 _ZIFFER_PATTERN = re.compile(
-    r"(?:Ziffer|Ziff\.?|GO[ÄA]E?|Nr\.?)\s*[:.\-]?\s*(\d{1,4})",
+    r"(?:Ziffer|Ziff\.?|GO[ÄA]E?|Nr\.?)\s*[:.\-]?\s*(\d{1,4})\b",
     re.IGNORECASE,
 )
+# Erkennt z.B. "Zuschlag D", "Zuschlag A", "Zus. K1", "Zuschlag K 1".
+_ZUSCHLAG_PATTERN = re.compile(
+    r"(?:Zuschlag|Zus\.?)\s*[:.\-]?\s*(A|B|C|D|K\s*1)\b",
+    re.IGNORECASE,
+)
+_TIME_PATTERN = re.compile(r"\b([01]?\d|2[0-3]):([0-5]\d)\b")
 # Rechnungs-/Belegnummern wie "GOÄ-2026-101" oder "2026-101" (Rechnungsdatum/
 # Referenznummer) duerfen nicht als abgerechnete Ziffer interpretiert werden.
 # Diese Muster werden vor der eigentlichen Ziffer-Extraktion aus dem Text
@@ -107,7 +117,7 @@ _ZIFFER_YEAR_MIN = 2020
 _ZIFFER_YEAR_MAX = 2035
 # Erkennt z.B. "2,3-fach", "3,5-fach", "2.3fach", "3,5x".
 _MULTIPLIER_FACH_PATTERN = re.compile(
-    r"(\d+(?:[.,]\d+)?)\s*[-\s]?(?:fach|x)\b",
+    r"(\d+(?:[.,]\d+)?)\s*[-\s]?(?:fach|x\b|×)",
     re.IGNORECASE,
 )
 # Erkennt z.B. "Faktor 2,3", "Faktor: 3.5", "Faktor=2,3".
@@ -309,6 +319,38 @@ def _extract_text_from_image(data: bytes) -> str:
     return text
 
 
+def _window_around(text: str, start: int, end: int, before: int = 24, after: int = 96) -> str:
+    return text[max(0, start - before) : min(len(text), end + after)]
+
+
+def _extract_multiplier(window: str, ziffer: str) -> float:
+    """Liest den Steigerungsfaktor aus einem Textfenster um die Ziffer."""
+    fallback = default_multiplier(ziffer)
+    match = _MULTIPLIER_FACH_PATTERN.search(window) or _MULTIPLIER_FAKTOR_PATTERN.search(
+        window
+    )
+    if not match:
+        return 1.0 if is_surcharge(ziffer) else fallback
+    try:
+        return _to_float(match.group(1))
+    except ValueError:
+        return 1.0 if is_surcharge(ziffer) else fallback
+
+
+def _extract_service_time(window: str) -> str | None:
+    match = _TIME_PATTERN.search(window)
+    if not match:
+        return None
+    return f"{int(match.group(1)):02d}:{match.group(2)}"
+
+
+def _threshold_for(ziffer: str) -> float:
+    entry = lookup(ziffer)
+    if entry is None:
+        return DEFAULT_MULTIPLIER
+    return float(entry["threshold_multiplier"])
+
+
 def parse_invoice_text(text: str) -> ParsedInvoice:
     """Extrahiert GOAE-Ziffern, Steigerungsfaktoren und Begruendung aus Text."""
     # Rechnungs-/Belegnummern (z.B. "GOÄ-2026-101", "2026-101") vorab entfernen,
@@ -322,35 +364,41 @@ def parse_invoice_text(text: str) -> ParsedInvoice:
 
     ziffern: list[ParsedZiffer] = []
     seen: set[str] = set()
-    for line in sanitized_text.splitlines():
-        for ziffer_match in _ZIFFER_PATTERN.finditer(line):
-            ziffer = ziffer_match.group(1)
-            if ziffer in seen:
-                continue
-            if _looks_like_year(ziffer):
-                continue
 
-            multiplier = DEFAULT_MULTIPLIER
-            mult_match = _MULTIPLIER_FACH_PATTERN.search(
-                line
-            ) or _MULTIPLIER_FAKTOR_PATTERN.search(line)
-            if mult_match:
-                try:
-                    multiplier = _to_float(mult_match.group(1))
-                except ValueError:
-                    multiplier = DEFAULT_MULTIPLIER
-
+    def _add_item(ziffer: str, start: int, end: int) -> None:
+        ziffer = normalize_ziffer(ziffer)
+        if not ziffer:
+            return
+        if _looks_like_year(ziffer):
+            return
+        allow_dupes = (ziffer == "420")
+        if ziffer in seen and not allow_dupes:
+            return
+        window = _window_around(sanitized_text, start, end)
+        factor_window = (
+            sanitized_text[end : end + 96] if is_surcharge(ziffer) else window
+        )
+        multiplier = _extract_multiplier(factor_window, ziffer)
+        threshold = _threshold_for(ziffer)
+        if not allow_dupes:
             seen.add(ziffer)
-            ziffern.append(
-                ParsedZiffer(
-                    ziffer=ziffer,
-                    multiplier=multiplier,
-                    justification=(
-                        justification if multiplier > DEFAULT_MULTIPLIER else None
-                    ),
-                    raw_line=line.strip(),
-                )
+        ziffern.append(
+            ParsedZiffer(
+                ziffer=ziffer,
+                multiplier=multiplier,
+                justification=(
+                    justification if multiplier > threshold + 1e-6 else None
+                ),
+                service_time=_extract_service_time(window),
+                raw_line=window.strip(),
             )
+        )
+
+    for match in _ZIFFER_PATTERN.finditer(sanitized_text):
+        _add_item(match.group(1), match.start(), match.end())
+    for match in _ZUSCHLAG_PATTERN.finditer(sanitized_text):
+        token = re.sub(r"\s+", "", match.group(1))
+        _add_item(token, match.start(), match.end())
 
     return ParsedInvoice(
         ziffern=ziffern,
