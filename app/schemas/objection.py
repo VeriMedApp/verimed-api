@@ -17,6 +17,8 @@ class SendObjectionRequest(BaseModel):
     body_html: str = Field(..., min_length=1)
     invoice_number: str = ""
     practice_name: str = ""
+    invoice_image_base64: str = ""
+    invoice_filename: str = ""
 
     @field_validator("recipient_email")
     @classmethod
@@ -26,7 +28,7 @@ class SendObjectionRequest(BaseModel):
             raise ValueError("Ungueltige Empfaenger-E-Mail")
         return cleaned
 
-    @field_validator("subject", "invoice_number", "practice_name")
+    @field_validator("subject", "invoice_number", "practice_name", "invoice_filename")
     @classmethod
     def strip_text(cls, value: str) -> str:
         return (value or "").strip()
