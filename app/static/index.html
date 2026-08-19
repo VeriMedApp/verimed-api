@@ -28,6 +28,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
     body { font-family: 'Inter', sans-serif; }
+    #saveDiaryBtn, #leavePracticeBtn { scroll-margin-bottom: 6.5rem; }
     .fade-in { animation: fadeIn .35s ease-out; }
     @keyframes fadeIn { from { opacity:0; transform: translateY(8px);} to {opacity:1; transform:none;} }
     .safe-bottom { padding-bottom: calc(0.85rem + env(safe-area-inset-bottom)); }
@@ -35,6 +36,24 @@
     input[type="time"], input[type="date"] { -webkit-appearance: none; }
     .tap { -webkit-tap-highlight-color: transparent; }
     ::-webkit-scrollbar { display: none; }
+    .live-pulse { animation: livePulse 1.6s ease-in-out infinite; }
+    @keyframes livePulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: .55; transform: scale(1.15); }
+    }
+    #toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(5.75rem + env(safe-area-inset-bottom));
+      transform: translateX(-50%);
+      z-index: 70;
+      max-width: calc(100% - 2rem);
+    }
+    .toast-in { animation: toastIn .28s ease-out; }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: none; }
+    }
   </style>
 </head>
 <body class="min-h-screen bg-slate-50 text-slate-800 tap pb-32">
@@ -72,9 +91,9 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 shrink-0"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3.5"/></svg>
           Foto
         </button>
-        <button id="tabBtnManual" type="button" class="tabBtn min-h-[40px] rounded-lg text-sm font-bold transition flex items-center justify-center gap-1.5">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 shrink-0"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
-          Manuell
+        <button id="tabBtnManual" type="button" class="tabBtn min-h-[40px] rounded-lg text-[13px] font-bold transition flex items-center justify-center gap-1.5 px-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 shrink-0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+          GOÄ manuell
         </button>
       </div>
 
@@ -104,26 +123,81 @@
           </button>
         </div>
         <p class="text-[11px] text-slate-400 leading-snug px-1">
-          Hinweis: Die Texterkennung läuft serverseitig. Ist auf diesem Server keine OCR-Engine verfügbar,
-          können Sie die Ziffern jederzeit unter „Manuell” selbst auswählen.
+          Hinweis: Die Texterkennung läuft serverseitig. Der Geofencing-Beweis kommt aus Ihrem Praxis-Tagebuch
+          (Live-Check-in oder nachgetragen) &middot; GOÄ-Ziffern können Sie auch unter „GOÄ manuell” prüfen.
         </p>
       </div>
 
-      <!-- Manual tab -->
+      <!-- Manual GOÄ audit tab (decoupled from presence logging) -->
       <div id="tabManual" class="hidden space-y-3">
-        <p class="text-xs text-slate-500">Ziffer antippen zum Auswählen. Faktor &gt; 2,3 erfordert eine Begründung.</p>
+        <div>
+          <h3 class="text-sm font-bold text-slate-800">GOÄ-Ziffern manuell prüfen</h3>
+          <p class="text-xs text-slate-500 mt-0.5">Ziffer antippen zum Auswählen. Faktor &gt; 2,3 erfordert eine Begründung. Die Zeitprüfung nutzt einen gespeicherten Praxisbesuch aus dem Tagebuch.</p>
+        </div>
+        <div>
+          <label for="auditDiarySelect" class="block text-xs font-medium text-slate-500 mb-1">Prüfen gegen Tagebuch-Eintrag</label>
+          <select id="auditDiarySelect"
+            class="w-full text-sm rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 focus:ring-2 focus:ring-brand-500 outline-none">
+            <option value="">Kein Eintrag vorhanden</option>
+          </select>
+        </div>
         <div id="zifferList" class="space-y-2.5">
           <div class="text-slate-400 text-sm py-6 text-center">Lade Katalog …</div>
         </div>
       </div>
     </section>
 
-    <!-- Section B: Zeit -->
+    <!-- Section B: Anwesenheit (entkoppelt von GOÄ-Ziffern) -->
     <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
       <div class="flex items-center gap-2 mb-3">
         <span class="h-6 w-6 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center text-xs font-bold shrink-0">2</span>
-        <h2 class="text-base font-bold">Wie lange waren Sie in der Praxis?</h2>
+        <h2 class="text-base font-bold">Praxisbesuch erfassen</h2>
       </div>
+
+      <p class="text-xs text-slate-500 mb-3">Aufenthalt unabhängig von der Rechnungsprüfung im Tagebuch speichern.</p>
+
+      <button id="liveCheckInBtn" type="button"
+        class="w-full min-h-[52px] rounded-2xl bg-brand-600 hover:bg-brand-700 active:scale-[.98] transition text-white font-extrabold text-sm shadow-md shadow-brand-600/20 flex items-center justify-center gap-2">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 shrink-0"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+        Ich bin jetzt in der Praxis
+      </button>
+
+      <div id="liveVisitBar" class="hidden fade-in mt-3 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-3 space-y-3">
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5 text-sm font-extrabold text-emerald-800">
+              <span class="h-2.5 w-2.5 rounded-full bg-emerald-500 live-pulse shrink-0"></span>
+              <span id="liveVisitStatus">Aktiv in der Praxis</span>
+            </div>
+            <div id="liveVisitPraxis" class="text-xs text-emerald-700/80 mt-0.5 truncate"></div>
+            <div id="liveRoomNote" class="hidden text-xs text-emerald-700 mt-1 font-medium"></div>
+          </div>
+          <div class="text-right shrink-0">
+            <div id="liveElapsed" class="text-xl font-extrabold text-emerald-700 tabular-nums leading-none">0 min</div>
+            <div class="text-[10px] text-emerald-600/80 mt-0.5">Live-Timer</div>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 gap-2">
+          <button id="enterRoomBtn" type="button"
+            class="min-h-[44px] rounded-xl bg-white border border-emerald-200 text-emerald-800 text-sm font-bold px-3 py-2 active:scale-95 transition flex items-center justify-center gap-2">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 shrink-0"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></svg>
+            Behandlungszimmer betreten
+          </button>
+          <button id="leavePracticeBtn" type="button"
+            class="min-h-[44px] rounded-xl bg-slate-800 text-white text-sm font-bold px-3 py-2 active:scale-95 transition flex items-center justify-center gap-2">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 shrink-0"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+            Praxis verlassen
+          </button>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 my-4">
+        <div class="h-px flex-1 bg-slate-200"></div>
+        <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">oder nachtragen</span>
+        <div class="h-px flex-1 bg-slate-200"></div>
+      </div>
+
+      <h3 class="text-sm font-bold text-slate-800 mb-2">Praxisbesuch nachtragen</h3>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
         <div>
@@ -132,7 +206,7 @@
             class="w-full text-lg font-semibold tabular-nums rounded-xl border border-slate-200 px-3 py-2.5 focus:ring-2 focus:ring-brand-500 outline-none" />
         </div>
         <div>
-          <label for="praxisName" class="block text-xs font-medium text-slate-500 mb-1">Praxis</label>
+          <label for="praxisName" class="block text-xs font-medium text-slate-500 mb-1">Praxisname</label>
           <input id="praxisName" type="text" value="Praxis Dr. Mustermann"
             class="w-full text-sm rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
             placeholder="Name der Praxis" />
@@ -147,12 +221,12 @@
 
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <label class="block text-xs font-medium text-slate-500 mb-1">Ankunft</label>
+          <label for="arrival" class="block text-xs font-medium text-slate-500 mb-1">Ankunftszeit</label>
           <input id="arrival" type="time"
             class="w-full text-lg font-semibold tabular-nums rounded-xl border border-slate-200 px-3 py-2.5 focus:ring-2 focus:ring-brand-500 outline-none" />
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-500 mb-1">Abfahrt</label>
+          <label for="departure" class="block text-xs font-medium text-slate-500 mb-1">Abfahrtszeit</label>
           <input id="departure" type="time"
             class="w-full text-lg font-semibold tabular-nums rounded-xl border border-slate-200 px-3 py-2.5 focus:ring-2 focus:ring-brand-500 outline-none" />
         </div>
@@ -162,6 +236,12 @@
         <span class="text-sm text-slate-500">Aufenthaltsdauer</span>
         <span id="durationTicker" class="text-2xl font-extrabold text-brand-600 tabular-nums">– min</span>
       </div>
+
+      <button id="saveDiaryBtn" type="button"
+        class="w-full min-h-[52px] mt-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-[.98] transition text-white font-extrabold text-sm shadow-md shadow-emerald-600/20 disabled:opacity-40 disabled:shadow-none flex items-center justify-center gap-2">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 shrink-0"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+        In Tagebuch speichern
+      </button>
     </section>
 
     <!-- Section C: Geofencing-Tagebuch -->
@@ -176,8 +256,8 @@
         <button id="clearGeofenceLogBtn" type="button" class="text-[11px] text-slate-400 underline underline-offset-2 active:text-slate-600 shrink-0">Löschen</button>
       </div>
       <p class="text-xs text-slate-500 mb-3">
-        Jede durchgeführte Prüfung wird automatisch als Geofencing-Nachweis auf diesem Gerät gespeichert
-        (localStorage) &middot; dient als Aufenthaltsnachweis für später eingehende Rechnungen.
+        Praxisbesuche werden per Live-Check-in oder Nachtrag auf diesem Gerät gespeichert
+        (localStorage) &middot; unabhängig von GOÄ-Ziffern &middot; dient als Aufenthaltsnachweis für später eingehende Rechnungen.
       </p>
       <div id="geofenceLogList" class="space-y-2"></div>
     </section>
@@ -194,6 +274,13 @@
         </span>
         <span id="selCount" class="hidden bg-white/20 text-white text-xs font-bold rounded-full h-5 min-w-[20px] px-1.5 items-center justify-center">0</span>
       </button>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="hidden toast-in">
+    <div class="bg-emerald-600 text-white text-sm font-bold rounded-2xl shadow-lg px-4 py-3 text-center leading-snug">
+      <span id="toastMsg">Praxisbesuch erfolgreich im Tagebuch gespeichert!</span>
     </div>
   </div>
 
@@ -232,6 +319,9 @@
       ban: '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
       fileWarning: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 11v4"/><path d="M12 18h.01"/>',
       loader: '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
+      logIn: '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/>',
+      logOut: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>',
+      receipt: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>',
     };
     function icon(name, cls) {
       return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls || 'h-5 w-5'} shrink-0">${ICON_PATHS[name] || ICON_PATHS.info}</svg>`;
@@ -280,8 +370,23 @@
 
     // --- Geofencing-Tagebuch (Proof-of-Presence-Log, lokal auf dem Geraet) ---
     const GEOFENCE_LOG_KEY = 'proofmed_geofence_log';
+    const ACTIVE_VISIT_KEY = 'proofmed_active_visit';
     const GEOFENCE_LOG_DISPLAY_LIMIT = 5;
     const GEOFENCE_LOG_STORAGE_LIMIT = 25;
+    let liveTickTimer = null;
+    let toastTimer = null;
+
+    function showToast(message) {
+      const el = $('toast');
+      $('toastMsg').textContent = message;
+      el.classList.remove('hidden');
+      el.classList.add('toast-in');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        el.classList.add('hidden');
+        el.classList.remove('toast-in');
+      }, 3200);
+    }
 
     function loadGeofenceLog() {
       try {
@@ -298,7 +403,7 @@
         console.warn('Geofencing-Tagebuch konnte nicht gespeichert werden:', e);
       }
     }
-    function addGeofenceLogEntry({ praxisName, dateISO, dateDE, arrival, departure, durationMinutes: mins }) {
+    function addGeofenceLogEntry({ praxisName, dateISO, dateDE, arrival, departure, durationMinutes: mins, source, treatmentStart }) {
       const iso = dateISO || selectedTreatmentDateISO();
       const entries = loadGeofenceLog();
       entries.unshift({
@@ -307,30 +412,63 @@
         dateISO: iso,
         dateDE: dateDE || formatDateDE(iso),
         arrival, departure,
-        durationMinutes: Math.round(mins),
+        durationMinutes: Math.max(1, Math.round(mins)),
+        treatmentStart: treatmentStart || null,
+        source: source || 'manual',
         createdAt: Date.now(),
       });
       saveGeofenceLog(entries);
       renderGeofenceLog();
+      return entries[0];
+    }
+    function persistDiaryVisit(payload) {
+      const entry = addGeofenceLogEntry(payload);
+      const select = $('auditDiarySelect');
+      if (select && entry?.id) select.value = entry.id;
+      showToast('🟢 Praxisbesuch erfolgreich im Tagebuch gespeichert!');
+      return entry;
+    }
+    function renderAuditDiarySelect() {
+      const select = $('auditDiarySelect');
+      if (!select) return;
+      const prev = select.value;
+      const entries = loadGeofenceLog();
+      if (!entries.length) {
+        select.innerHTML = '<option value="">Kein Eintrag vorhanden — zuerst Besuch speichern</option>';
+        return;
+      }
+      select.innerHTML = entries.map(e => {
+        const label = `${e.praxisName} · ${e.dateDE || formatDateDE(e.dateISO)} · ${e.arrival}–${e.departure} (${e.durationMinutes} Min)`;
+        return `<option value="${e.id}">${label}</option>`;
+      }).join('');
+      if (prev && entries.some(e => e.id === prev)) select.value = prev;
+    }
+    function getSelectedAuditEntry() {
+      const id = $('auditDiarySelect')?.value;
+      if (!id) return null;
+      return loadGeofenceLog().find(e => e.id === id) || null;
     }
     function renderGeofenceLog() {
       const container = $('geofenceLogList');
       const entries = loadGeofenceLog();
+      renderAuditDiarySelect();
       if (!entries.length) {
         container.innerHTML = `
           <div class="text-slate-400 text-xs py-4 text-center leading-relaxed">
-            Noch keine Besuche erfasst.<br/>Eine manuelle Prüfung legt automatisch einen Tagebuch-Eintrag an.
+            Noch keine Besuche erfasst.<br/>Live-Check-in oder „In Tagebuch speichern” legt einen Eintrag an — ohne GOÄ-Ziffern.
           </div>`;
+        updateCTAState();
         return;
       }
       container.innerHTML = entries.slice(0, GEOFENCE_LOG_DISPLAY_LIMIT).map(e => `
         <div class="flex items-center justify-between gap-2 text-sm bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5">
           <div class="min-w-0">
             <div class="font-semibold text-slate-700 truncate">${e.praxisName}</div>
-            <div class="text-xs text-slate-400">${e.dateDE || formatDateDE(e.dateISO)} &middot; ${e.arrival}–${e.departure} Uhr</div>
+            <div class="text-xs text-slate-400">${e.dateDE || formatDateDE(e.dateISO)} &middot; ${e.arrival}–${e.departure} Uhr${e.treatmentStart ? ` · Zimmer ${e.treatmentStart}` : ''}</div>
           </div>
           <div class="shrink-0 text-xs font-bold bg-brand-50 text-brand-700 px-2 py-1 rounded-full">Aufenthalt: ${e.durationMinutes} Min</div>
         </div>`).join('');
+      updateCTAState();
     }
     function normalizePraxisName(name) {
       return (name || '')
@@ -371,14 +509,146 @@
       saveGeofenceLog([]);
       renderGeofenceLog();
     });
+
+    // --- Live-Check-in / Timer ---
+    function loadActiveVisit() {
+      try {
+        const raw = localStorage.getItem(ACTIVE_VISIT_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    }
+    function saveActiveVisit(visit) {
+      try {
+        if (visit) localStorage.setItem(ACTIVE_VISIT_KEY, JSON.stringify(visit));
+        else localStorage.removeItem(ACTIVE_VISIT_KEY);
+      } catch (e) {
+        console.warn('Aktiver Besuch konnte nicht gespeichert werden:', e);
+      }
+    }
+    function formatElapsed(ms) {
+      const totalSec = Math.max(0, Math.floor(ms / 1000));
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      const s = totalSec % 60;
+      if (h > 0) return `${h} Std ${m} Min`;
+      if (m > 0) return `${m} min ${String(s).padStart(2, '0')} s`;
+      return `${s} s`;
+    }
+    function stopLiveTicker() {
+      if (liveTickTimer) {
+        clearInterval(liveTickTimer);
+        liveTickTimer = null;
+      }
+    }
+    function renderLiveVisit() {
+      const visit = loadActiveVisit();
+      const active = !!visit;
+      $('liveCheckInBtn').classList.toggle('hidden', active);
+      $('liveVisitBar').classList.toggle('hidden', !active);
+      if (!active) {
+        stopLiveTicker();
+        return;
+      }
+      $('liveVisitStatus').textContent = `🟢 Aktiv in der Praxis seit ${visit.arrival} Uhr`;
+      $('liveVisitPraxis').textContent = `${visit.praxisName} · ${visit.dateDE || formatDateDE(visit.dateISO)}`;
+      const roomNote = $('liveRoomNote');
+      if (visit.treatmentStart) {
+        roomNote.textContent = `Behandlungszimmer betreten um ${visit.treatmentStart} Uhr`;
+        roomNote.classList.remove('hidden');
+        $('enterRoomBtn').disabled = true;
+        $('enterRoomBtn').classList.add('opacity-50');
+      } else {
+        roomNote.classList.add('hidden');
+        $('enterRoomBtn').disabled = false;
+        $('enterRoomBtn').classList.remove('opacity-50');
+      }
+      const tick = () => {
+        $('liveElapsed').textContent = formatElapsed(Date.now() - visit.startedAt);
+      };
+      tick();
+      stopLiveTicker();
+      liveTickTimer = setInterval(tick, 1000);
+    }
+    function startLiveCheckIn() {
+      if (loadActiveVisit()) return;
+      const now = new Date();
+      const dateISO = todayISODate();
+      const visit = {
+        praxisName: $('praxisName').value.trim() || 'Unbenannte Praxis',
+        dateISO,
+        dateDE: formatDateDE(dateISO),
+        arrival: fmtTime(now),
+        startedAt: Date.now(),
+        treatmentStart: null,
+        treatmentStartedAt: null,
+      };
+      saveActiveVisit(visit);
+      renderLiveVisit();
+    }
+    function enterTreatmentRoom() {
+      const visit = loadActiveVisit();
+      if (!visit || visit.treatmentStart) return;
+      const now = new Date();
+      visit.treatmentStart = fmtTime(now);
+      visit.treatmentStartedAt = Date.now();
+      saveActiveVisit(visit);
+      renderLiveVisit();
+    }
+    function leavePractice() {
+      const visit = loadActiveVisit();
+      if (!visit) return;
+      const now = new Date();
+      const departure = fmtTime(now);
+      const mins = Math.max(1, Math.round((Date.now() - visit.startedAt) / 60000));
+      persistDiaryVisit({
+        praxisName: visit.praxisName,
+        dateISO: visit.dateISO,
+        dateDE: visit.dateDE,
+        arrival: visit.arrival,
+        departure,
+        durationMinutes: mins,
+        treatmentStart: visit.treatmentStart,
+        source: 'live',
+      });
+      $('arrival').value = visit.arrival;
+      $('departure').value = departure;
+      if ($('treatmentDate')) $('treatmentDate').value = visit.dateISO;
+      if ($('praxisName')) $('praxisName').value = visit.praxisName;
+      saveActiveVisit(null);
+      renderLiveVisit();
+      updateTicker();
+    }
+    $('liveCheckInBtn').addEventListener('click', startLiveCheckIn);
+    $('enterRoomBtn').addEventListener('click', enterTreatmentRoom);
+    $('leavePracticeBtn').addEventListener('click', leavePractice);
+
     function updateTicker() {
       const m = durationMinutes();
       const t = $('durationTicker');
+      const saveBtn = $('saveDiaryBtn');
+      const valid = m !== null && m > 0;
       if (m === null) { t.textContent = '– min'; t.className = 'text-2xl font-extrabold text-slate-400 tabular-nums'; }
       else if (m <= 0) { t.textContent = 'ungültig'; t.className = 'text-2xl font-extrabold text-red-500 tabular-nums'; }
       else { t.textContent = m.toFixed(0) + ' min'; t.className = 'text-2xl font-extrabold text-brand-600 tabular-nums'; }
+      if (saveBtn) saveBtn.disabled = !valid;
       updateCTAState();
     }
+    $('saveDiaryBtn').addEventListener('click', () => {
+      const m = durationMinutes();
+      if (m === null || m <= 0) return;
+      const dateISO = selectedTreatmentDateISO();
+      persistDiaryVisit({
+        praxisName: $('praxisName').value.trim() || 'Unbenannte Praxis',
+        dateISO,
+        dateDE: formatDateDE(dateISO),
+        arrival: $('arrival').value,
+        departure: $('departure').value,
+        durationMinutes: m,
+        source: 'manual',
+      });
+    });
     document.querySelectorAll('.quickTimeBtn').forEach(btn => {
       btn.addEventListener('click', () => {
         const mins = parseInt(btn.dataset.mins, 10);
@@ -398,7 +668,7 @@
       $('tabFoto').classList.toggle('hidden', !fotoActive);
       $('tabManual').classList.toggle('hidden', fotoActive);
       $('tabBtnFoto').className = 'tabBtn min-h-[40px] rounded-lg text-sm font-bold transition flex items-center justify-center gap-1.5 ' + (fotoActive ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500');
-      $('tabBtnManual').className = 'tabBtn min-h-[40px] rounded-lg text-sm font-bold transition flex items-center justify-center gap-1.5 ' + (!fotoActive ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500');
+      $('tabBtnManual').className = 'tabBtn min-h-[40px] rounded-lg text-[13px] font-bold transition flex items-center justify-center gap-1.5 px-1 ' + (!fotoActive ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500');
       updateCTAState();
     }
     $('tabBtnFoto').addEventListener('click', () => setTab('foto'));
@@ -589,11 +859,68 @@
     });
 
     // --- Sticky CTA state ---
-    function updateCTAState() {
+    function resolveGeofenceTimes() {
+      const formDate = selectedTreatmentDateISO();
+      const formPraxis = $('praxisName').value.trim() || 'Unbenannte Praxis';
+      if (activeTab === 'manual') {
+        const audit = getSelectedAuditEntry();
+        if (audit && audit.arrival && audit.departure) {
+          return {
+            praxisName: audit.praxisName,
+            dateISO: audit.dateISO,
+            arrival: audit.arrival,
+            departure: audit.departure,
+            durationMinutes: audit.durationMinutes,
+          };
+        }
+      }
+      const byForm = findGeofenceMatch(formDate, formPraxis, formDate);
+      if (byForm) {
+        return {
+          praxisName: byForm.praxisName,
+          dateISO: byForm.dateISO,
+          arrival: byForm.arrival,
+          departure: byForm.departure,
+          durationMinutes: byForm.durationMinutes,
+        };
+      }
+      const active = loadActiveVisit();
+      if (active) {
+        const now = new Date();
+        return {
+          praxisName: active.praxisName,
+          dateISO: active.dateISO,
+          arrival: active.arrival,
+          departure: fmtTime(now),
+          durationMinutes: Math.max(1, Math.round((Date.now() - active.startedAt) / 60000)),
+        };
+      }
       const dur = durationMinutes();
-      const validDuration = dur !== null && dur > 0;
+      if (dur !== null && dur > 0) {
+        return {
+          praxisName: formPraxis,
+          dateISO: formDate,
+          arrival: $('arrival').value,
+          departure: $('departure').value,
+          durationMinutes: dur,
+        };
+      }
+      const latest = loadGeofenceLog()[0];
+      if (latest) {
+        return {
+          praxisName: latest.praxisName,
+          dateISO: latest.dateISO,
+          arrival: latest.arrival,
+          departure: latest.departure,
+          durationMinutes: latest.durationMinutes,
+        };
+      }
+      return null;
+    }
+    function updateCTAState() {
+      const times = resolveGeofenceTimes();
       const manualCount = selectedManualItems().length;
-      const ready = validDuration && (attachedPhoto !== null || manualCount > 0);
+      const ready = !!times && (attachedPhoto !== null || manualCount > 0);
 
       $('verifyBtn').disabled = !ready;
       const badge = $('selCount');
@@ -609,9 +936,7 @@
 
     // --- Verify (unified CTA) ---
     $('verifyBtn').addEventListener('click', async () => {
-      const dur = durationMinutes();
-      if (dur === null || dur <= 0) return;
-
+      if (!resolveGeofenceTimes()) return;
       if (attachedPhoto) {
         await runParseAndValidate();
       } else {
@@ -629,15 +954,17 @@
 
     async function runManualValidate() {
       const items = selectedManualItems();
-      const praxisName = $('praxisName').value || 'Unbenannte Praxis';
-      const arrival = $('arrival').value;
-      const departure = $('departure').value;
-      const dateISO = selectedTreatmentDateISO();
+      if (!items.length) return;
+      const times = resolveGeofenceTimes();
+      if (!times) {
+        alert('Bitte zuerst einen Praxisbesuch im Tagebuch speichern oder Zeiten nachtragen.');
+        return;
+      }
       const payload = {
         patient_id: 'mobil-' + Date.now(),
-        praxis_name: praxisName,
-        geofence_arrival: combineOnDate(arrival, dateISO).toISOString(),
-        geofence_departure: combineOnDate(departure, dateISO).toISOString(),
+        praxis_name: times.praxisName,
+        geofence_arrival: combineOnDate(times.arrival, times.dateISO).toISOString(),
+        geofence_departure: combineOnDate(times.departure, times.dateISO).toISOString(),
         total_billed_amount: 0,
         billed_ziffern: items.map(i => ({ ziffer: i.ziffer, multiplier: i.multiplier, justification: i.justification })),
       };
@@ -648,19 +975,8 @@
         });
         const data = await r.json();
         if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : ('HTTP ' + r.status));
-        // Ein manuell durchgefuehrter Check simuliert einen live erfassten
-        // Geofencing-Besuch -> wird als Tagebuch-Eintrag hinterlegt, damit
-        // spaeter eingehende Rechnungen (Foto-Scan) dagegen abgeglichen
-        // werden koennen. Datum = vom Nutzer gewaehltes Behandlungsdatum.
-        addGeofenceLogEntry({
-          praxisName,
-          dateISO,
-          dateDE: formatDateDE(dateISO),
-          arrival,
-          departure,
-          durationMinutes: data.actual_duration_minutes,
-        });
-        showResult(data);
+        const geofenceMatch = findGeofenceMatch(times.dateISO, times.praxisName, times.dateISO);
+        showResult(data, null, geofenceMatch, times.dateISO, times.praxisName);
       } catch (e) {
         alert('Fehler bei der Prüfung: ' + e.message);
       } finally {
@@ -670,12 +986,16 @@
     }
 
     async function runParseAndValidate() {
-      const dateISO = selectedTreatmentDateISO();
+      const times = resolveGeofenceTimes();
+      if (!times) {
+        alert('Bitte zuerst einen Praxisbesuch im Tagebuch speichern — die Rechnung wird dagegen abgeglichen.');
+        return;
+      }
       const form = new FormData();
-      form.append('geofence_arrival', combineOnDate($('arrival').value, dateISO).toISOString());
-      form.append('geofence_departure', combineOnDate($('departure').value, dateISO).toISOString());
+      form.append('geofence_arrival', combineOnDate(times.arrival, times.dateISO).toISOString());
+      form.append('geofence_departure', combineOnDate(times.departure, times.dateISO).toISOString());
       form.append('patient_id', 'mobil-' + Date.now());
-      form.append('praxis_name', $('praxisName').value || 'Unbenannte Praxis');
+      form.append('praxis_name', times.praxisName || 'Unbenannte Praxis');
       form.append('total_billed_amount', '0');
       form.append('file', attachedPhoto);
 
@@ -687,16 +1007,14 @@
           const detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
           throw new Error(detail || ('HTTP ' + r.status));
         }
-        // OCR-Behandlungsdatum UND das im Formular gewaehlte Datum gegen
-        // das lokale Geofencing-Tagebuch abgleichen.
         const geofenceMatch = findGeofenceMatch(
           data.extracted_treatment_date,
           data.extracted_praxis_name,
-          dateISO,
+          times.dateISO,
         );
         showResult(data.report, data.parsed_ziffern, geofenceMatch, data.extracted_treatment_date, data.extracted_praxis_name);
       } catch (e) {
-        alert('Foto konnte nicht ausgewertet werden:\n' + e.message + '\n\nBitte alternativ „Manuell” nutzen.');
+        alert('Foto konnte nicht ausgewertet werden:\n' + e.message + '\n\nBitte alternativ „GOÄ manuell” nutzen.');
         setTab('manual');
       } finally {
         setBtnLoading(false);
@@ -876,6 +1194,8 @@
     checkHealth();
     loadCatalog();
     renderGeofenceLog();
+    renderLiveVisit();
+    $('auditDiarySelect')?.addEventListener('change', updateCTAState);
   </script>
 </body>
 </html>
