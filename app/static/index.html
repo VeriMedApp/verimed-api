@@ -58,7 +58,7 @@
     }
   </style>
 </head>
-<body class="min-h-screen bg-slate-50 text-slate-800 tap pb-32">
+<body class="min-h-screen bg-slate-50 text-slate-800 tap pb-40">
 
   <!-- Header -->
   <header class="safe-top sticky top-0 z-30 bg-gradient-to-r from-brand-700 via-brand-600 to-brand-500 text-white shadow-lg">
@@ -74,6 +74,15 @@
         <span id="apiDot" class="h-2 w-2 rounded-full bg-amber-300 animate-pulse"></span>
         <span id="apiStatus">Verbinde …</span>
       </div>
+    </div>
+    <div class="max-w-md mx-auto px-4 pb-3">
+      <button type="button" id="privacyBadgeBtn"
+        class="w-full text-left rounded-xl bg-emerald-500/20 border border-white/20 px-3 py-2 active:scale-[.99] transition">
+        <div class="text-[12px] font-extrabold text-white leading-snug">🔒 100% DSGVO-konform &amp; Lokal</div>
+        <p class="text-[10px] text-emerald-50/95 leading-snug mt-0.5">
+          Sämtliche Standort-Logs, GPS-Koordinaten und Rechnungsdaten verbleiben ausschließlich im lokalen Speicher deines Smartphones (<span class="font-mono">localStorage</span>).
+        </p>
+      </button>
     </div>
   </header>
 
@@ -317,6 +326,24 @@
     </section>
   </main>
 
+  <footer class="max-w-md mx-auto px-4 pb-24 pt-1">
+    <div class="rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-[11px] text-slate-500 leading-relaxed">
+      <p>
+        ⚖️ <strong class="text-slate-700">Rechtlicher Hinweis:</strong> ProofMed ist ein technischer Prüf- und Vorlagen-Assistent.
+        Die App führt keine individuelle Rechtsberatung im Sinne des Rechtsdienstleistungsgesetzes (RDG) durch.
+        Generierte Einwand-Schreiben stellen automatisierte Musterschreiben dar.
+      </p>
+      <div class="flex flex-wrap gap-x-3 gap-y-1 mt-2">
+        <button type="button" id="openLegalModalBtn" class="text-brand-700 font-semibold underline underline-offset-2">
+          Rechtlicher Status &amp; RDG-Hinweis
+        </button>
+        <button type="button" id="openPrivacyModalBtn" class="text-brand-700 font-semibold underline underline-offset-2">
+          Datenschutz &amp; Transparenz
+        </button>
+      </div>
+    </div>
+  </footer>
+
   <!-- Sticky bottom CTA -->
   <div class="fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-slate-200 safe-bottom pt-3 px-4">
     <div class="max-w-md mx-auto">
@@ -347,6 +374,51 @@
       <h2 class="text-base font-bold">Prüfergebnis</h2>
     </div>
     <div id="resultContent" class="max-w-md mx-auto px-4 py-4 pb-10 space-y-4"></div>
+  </div>
+
+  <!-- RDG legal modal -->
+  <div id="legalModal" class="hidden fixed inset-0 z-[70] bg-slate-900/50 px-4 py-8 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="legalModalTitle">
+    <div class="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-5 mt-10 fade-in">
+      <div class="flex items-start justify-between gap-3 mb-3">
+        <h2 id="legalModalTitle" class="text-base font-extrabold text-slate-800">Rechtlicher Status &amp; RDG-Hinweis</h2>
+        <button type="button" id="closeLegalModalBtn" class="h-9 w-9 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center shrink-0" aria-label="Schließen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <p class="text-sm text-slate-600 leading-relaxed mb-3">
+        ⚖️ <strong>Rechtlicher Hinweis:</strong> ProofMed ist ein technischer Prüf- und Vorlagen-Assistent.
+        Die App führt keine individuelle Rechtsberatung im Sinne des Rechtsdienstleistungsgesetzes (RDG) durch.
+        Generierte Einwand-Schreiben stellen automatisierte Musterschreiben dar.
+      </p>
+      <ul class="text-sm text-slate-600 leading-relaxed space-y-2 list-disc pl-5">
+        <li>Die Prüfung erfolgt regelbasiert (GOÄ-Katalog, Zeiten, Ausschlüsse) — ohne anwaltliche Würdigung Ihres Einzelfalls.</li>
+        <li>Musterschreiben müssen Sie selbst prüfen, anpassen und in eigener Verantwortung versenden.</li>
+        <li>Bei Unsicherheiten wenden Sie sich an eine Rechtsanwältin / einen Rechtsanwalt oder Ihre Beihilfestelle.</li>
+      </ul>
+      <p class="text-[11px] text-slate-400 mt-3">Rechtsgrundlage der Abgrenzung: § 2 Rechtsdienstleistungsgesetz (RDG).</p>
+    </div>
+  </div>
+
+  <!-- DSGVO privacy modal -->
+  <div id="privacyModal" class="hidden fixed inset-0 z-[70] bg-slate-900/50 px-4 py-8 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="privacyModalTitle">
+    <div class="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-5 mt-10 fade-in">
+      <div class="flex items-start justify-between gap-3 mb-3">
+        <h2 id="privacyModalTitle" class="text-base font-extrabold text-slate-800">Datenschutz &amp; Transparenz</h2>
+        <button type="button" id="closePrivacyModalBtn" class="h-9 w-9 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center shrink-0" aria-label="Schließen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <p class="text-sm font-bold text-emerald-800 mb-2">🔒 100% DSGVO-konform &amp; Lokal — Zero-Cloud Data Sovereignty</p>
+      <p class="text-sm text-slate-600 leading-relaxed mb-3">
+        Sämtliche Standort-Logs, GPS-Koordinaten und Rechnungsdaten verbleiben ausschließlich im lokalen Speicher deines Smartphones (<span class="font-mono text-xs">localStorage</span>).
+      </p>
+      <ul class="text-sm text-slate-600 leading-relaxed space-y-2 list-disc pl-5">
+        <li><strong>Lokale Rechnungsverarbeitung:</strong> Fotos/PDFs werden auf dem Gerät als Datei bzw. Base64 vorgehalten; ein Upload erfolgt nur, wenn Sie selbst „Abrechnung prüfen“ oder „Einwand senden“ auslösen.</li>
+        <li><strong>Kein Tracking von Praxisbesuchen:</strong> Live-Check-in, GPS und Tagebuch bleiben auf dem Gerät. Es gibt kein serverseitiges Bewegungsprofil.</li>
+        <li><strong>Volle Kontrolle:</strong> Einträge können jederzeit archiviert oder gelöscht werden. Ohne Ihre Aktion verlassen Gesundheits- und Standortdaten das Gerät nicht.</li>
+      </ul>
+      <p class="text-[11px] text-slate-400 mt-3">Ausgerichtet auf Privatpatienten und Beihilfeberechtigte mit besonders schutzbedürftigen Gesundheitsdaten.</p>
+    </div>
   </div>
 
   <script>
@@ -2324,6 +2396,12 @@ td.num, th.num { text-align: right; white-space: nowrap; }
           <label for="objectionPreview" class="block text-xs font-medium text-slate-500 mb-1">Vorschau des Widerspruchsschreibens</label>
           <textarea id="objectionPreview" rows="12"
             class="w-full text-xs leading-relaxed rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 mb-3 focus:ring-2 focus:ring-brand-500 outline-none font-sans"></textarea>
+          <p class="text-[11px] text-slate-500 leading-relaxed mb-3">
+            ⚖️ <strong class="text-slate-700">Rechtlicher Hinweis:</strong> ProofMed ist ein technischer Prüf- und Vorlagen-Assistent.
+            Die App führt keine individuelle Rechtsberatung im Sinne des Rechtsdienstleistungsgesetzes (RDG) durch.
+            Generierte Einwand-Schreiben stellen automatisierte Musterschreiben dar.
+            <button type="button" onclick="openLegalModal()" class="text-brand-700 font-semibold underline underline-offset-2 ml-1">Rechtlicher Status &amp; RDG-Hinweis</button>
+          </p>
           <div class="grid grid-cols-1 gap-2">
             <button type="button" id="sendObjectionBtn" onclick="sendObjectionFromApp()"
               class="min-h-[48px] rounded-xl bg-brand-600 text-white text-sm font-bold px-3 py-2 active:scale-[.98] transition flex items-center justify-center gap-2">
@@ -2395,6 +2473,33 @@ td.num, th.num { text-align: right; white-space: nowrap; }
     $('dossierPdfBtn')?.addEventListener('click', printDossierPdf);
     $('dossierCsvBtn')?.addEventListener('click', downloadDossierCsv);
     $('auditDiarySelect')?.addEventListener('change', updateCTAState);
+
+    function openLegalModal() {
+      $('privacyModal')?.classList.add('hidden');
+      $('legalModal')?.classList.remove('hidden');
+    }
+    function closeLegalModal() {
+      $('legalModal')?.classList.add('hidden');
+    }
+    function openPrivacyModal() {
+      $('legalModal')?.classList.add('hidden');
+      $('privacyModal')?.classList.remove('hidden');
+    }
+    function closePrivacyModal() {
+      $('privacyModal')?.classList.add('hidden');
+    }
+    $('privacyBadgeBtn')?.addEventListener('click', openPrivacyModal);
+    $('openLegalModalBtn')?.addEventListener('click', openLegalModal);
+    $('openPrivacyModalBtn')?.addEventListener('click', openPrivacyModal);
+    $('closeLegalModalBtn')?.addEventListener('click', closeLegalModal);
+    $('closePrivacyModalBtn')?.addEventListener('click', closePrivacyModal);
+    $('legalModal')?.addEventListener('click', (e) => { if (e.target === $('legalModal')) closeLegalModal(); });
+    $('privacyModal')?.addEventListener('click', (e) => { if (e.target === $('privacyModal')) closePrivacyModal(); });
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      closeLegalModal();
+      closePrivacyModal();
+    });
   </script>
 </body>
 </html>
