@@ -32,7 +32,7 @@
     @keyframes fadeIn { from { opacity:0; transform: translateY(8px);} to {opacity:1; transform:none;} }
     .safe-bottom { padding-bottom: calc(0.85rem + env(safe-area-inset-bottom)); }
     .safe-top { padding-top: calc(0.5rem + env(safe-area-inset-top)); }
-    input[type="time"] { -webkit-appearance: none; }
+    input[type="time"], input[type="date"] { -webkit-appearance: none; }
     .tap { -webkit-tap-highlight-color: transparent; }
     ::-webkit-scrollbar { display: none; }
   </style>
@@ -125,9 +125,19 @@
         <h2 class="text-base font-bold">Wie lange waren Sie in der Praxis?</h2>
       </div>
 
-      <input id="praxisName" type="text" value="Praxis Dr. Mustermann"
-        class="w-full text-sm rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 mb-3 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
-        placeholder="Name der Praxis" />
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+        <div>
+          <label for="treatmentDate" class="block text-xs font-medium text-slate-500 mb-1">Behandlungsdatum</label>
+          <input id="treatmentDate" type="date"
+            class="w-full text-lg font-semibold tabular-nums rounded-xl border border-slate-200 px-3 py-2.5 focus:ring-2 focus:ring-brand-500 outline-none" />
+        </div>
+        <div>
+          <label for="praxisName" class="block text-xs font-medium text-slate-500 mb-1">Praxis</label>
+          <input id="praxisName" type="text" value="Praxis Dr. Mustermann"
+            class="w-full text-sm rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
+            placeholder="Name der Praxis" />
+        </div>
+      </div>
 
       <div class="grid grid-cols-3 gap-2 mb-3">
         <button type="button" class="quickTimeBtn min-h-[44px] rounded-xl bg-brand-50 text-brand-700 text-xs font-bold px-2 py-2 border border-brand-100 active:scale-95 transition" data-mins="15">Vor 15 Min<br/>da gewesen</button>
@@ -231,23 +241,8 @@
       $('photoStatus').className = `text-xs font-medium flex items-center gap-1 ${colorClass}`;
     }
 
-    // --- Time helpers ---
+    // --- Time / date helpers ---
     function fmtTime(d) { return d.toTimeString().slice(0, 5); }
-    function combineToday(timeStr) {
-      const [h, m] = timeStr.split(':').map(Number);
-      const d = new Date();
-      d.setHours(h, m, 0, 0);
-      return d;
-    }
-    function initTimes() {
-      $('arrival').value = '09:00';
-      $('departure').value = '09:12';
-    }
-    function durationMinutes() {
-      const a = $('arrival').value, b = $('departure').value;
-      if (!a || !b) return null;
-      return (combineToday(b) - combineToday(a)) / 60000;
-    }
     function todayISODate() {
       const d = new Date();
       const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -258,6 +253,29 @@
       if (!iso) return '';
       const [y, m, d] = iso.split('-');
       return `${d}.${m}.${y}`;
+    }
+    function selectedTreatmentDateISO() {
+      return $('treatmentDate')?.value || todayISODate();
+    }
+    function combineOnDate(timeStr, dateISO) {
+      const [h, m] = timeStr.split(':').map(Number);
+      const iso = dateISO || selectedTreatmentDateISO();
+      const [y, mo, d] = iso.split('-').map(Number);
+      return new Date(y, mo - 1, d, h, m, 0, 0);
+    }
+    function initTimes() {
+      const today = todayISODate();
+      const dateInput = $('treatmentDate');
+      dateInput.value = today;
+      dateInput.max = today;
+      $('arrival').value = '09:00';
+      $('departure').value = '09:12';
+    }
+    function durationMinutes() {
+      const a = $('arrival').value, b = $('departure').value;
+      if (!a || !b) return null;
+      const dateISO = selectedTreatmentDateISO();
+      return (combineOnDate(b, dateISO) - combineOnDate(a, dateISO)) / 60000;
     }
 
     // --- Geofencing-Tagebuch (Proof-of-Presence-Log, lokal auf dem Geraet) ---
@@ -280,11 +298,15 @@
         console.warn('Geofencing-Tagebuch konnte nicht gespeichert werden:', e);
       }
     }
-    function addGeofenceLogEntry({ praxisName, dateISO, arrival, departure, durationMinutes: mins }) {
+    function addGeofenceLogEntry({ praxisName, dateISO, dateDE, arrival, departure, durationMinutes: mins }) {
+      const iso = dateISO || selectedTreatmentDateISO();
       const entries = loadGeofenceLog();
       entries.unshift({
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        praxisName, dateISO, arrival, departure,
+        praxisName,
+        dateISO: iso,
+        dateDE: dateDE || formatDateDE(iso),
+        arrival, departure,
         durationMinutes: Math.round(mins),
         createdAt: Date.now(),
       });
@@ -305,7 +327,7 @@
         <div class="flex items-center justify-between gap-2 text-sm bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5">
           <div class="min-w-0">
             <div class="font-semibold text-slate-700 truncate">${e.praxisName}</div>
-            <div class="text-xs text-slate-400">${formatDateDE(e.dateISO)} &middot; ${e.arrival}–${e.departure} Uhr</div>
+            <div class="text-xs text-slate-400">${e.dateDE || formatDateDE(e.dateISO)} &middot; ${e.arrival}–${e.departure} Uhr</div>
           </div>
           <div class="shrink-0 text-xs font-bold bg-brand-50 text-brand-700 px-2 py-1 rounded-full">Aufenthalt: ${e.durationMinutes} Min</div>
         </div>`).join('');
@@ -318,15 +340,31 @@
         .replace(/[^a-zäöüß0-9]+/g, ' ')
         .trim();
     }
-    function findGeofenceMatch(extractedDateISO, extractedPraxisName) {
-      if (!extractedDateISO || !extractedPraxisName) return null;
+    function findGeofenceMatch(extractedDateISO, extractedPraxisName, selectedDateISO) {
+      if (!extractedPraxisName) return null;
       const target = normalizePraxisName(extractedPraxisName);
       if (!target) return null;
-      const entries = loadGeofenceLog().filter(e => e.dateISO === extractedDateISO);
-      return entries.find(e => {
+      const selectedISO = selectedDateISO || selectedTreatmentDateISO();
+      const entries = loadGeofenceLog();
+      const praxisMatch = (e) => {
         const n = normalizePraxisName(e.praxisName);
         return n && (n.includes(target) || target.includes(n));
-      }) || null;
+      };
+      // Bevorzugt Eintraege, bei denen OCR-Datum UND gewaehltes
+      // Behandlungsdatum mit dem Tagebuch-Eintrag uebereinstimmen.
+      if (extractedDateISO && selectedISO && extractedDateISO === selectedISO) {
+        const both = entries.find(e => e.dateISO === extractedDateISO && praxisMatch(e));
+        if (both) return both;
+      }
+      if (extractedDateISO) {
+        const byOcr = entries.find(e => e.dateISO === extractedDateISO && praxisMatch(e));
+        if (byOcr) return byOcr;
+      }
+      if (selectedISO) {
+        const bySelected = entries.find(e => e.dateISO === selectedISO && praxisMatch(e));
+        if (bySelected) return bySelected;
+      }
+      return null;
     }
     $('clearGeofenceLogBtn').addEventListener('click', () => {
       if (!confirm('Geofencing-Tagebuch auf diesem Gerät wirklich löschen?')) return;
@@ -351,7 +389,7 @@
         updateTicker();
       });
     });
-    ['arrival', 'departure'].forEach(id => $(id).addEventListener('input', updateTicker));
+    ['arrival', 'departure', 'treatmentDate'].forEach(id => $(id).addEventListener('input', updateTicker));
 
     // --- Tabs ---
     function setTab(tab) {
@@ -594,11 +632,12 @@
       const praxisName = $('praxisName').value || 'Unbenannte Praxis';
       const arrival = $('arrival').value;
       const departure = $('departure').value;
+      const dateISO = selectedTreatmentDateISO();
       const payload = {
         patient_id: 'mobil-' + Date.now(),
         praxis_name: praxisName,
-        geofence_arrival: combineToday(arrival).toISOString(),
-        geofence_departure: combineToday(departure).toISOString(),
+        geofence_arrival: combineOnDate(arrival, dateISO).toISOString(),
+        geofence_departure: combineOnDate(departure, dateISO).toISOString(),
         total_billed_amount: 0,
         billed_ziffern: items.map(i => ({ ziffer: i.ziffer, multiplier: i.multiplier, justification: i.justification })),
       };
@@ -612,10 +651,11 @@
         // Ein manuell durchgefuehrter Check simuliert einen live erfassten
         // Geofencing-Besuch -> wird als Tagebuch-Eintrag hinterlegt, damit
         // spaeter eingehende Rechnungen (Foto-Scan) dagegen abgeglichen
-        // werden koennen.
+        // werden koennen. Datum = vom Nutzer gewaehltes Behandlungsdatum.
         addGeofenceLogEntry({
           praxisName,
-          dateISO: todayISODate(),
+          dateISO,
+          dateDE: formatDateDE(dateISO),
           arrival,
           departure,
           durationMinutes: data.actual_duration_minutes,
@@ -630,9 +670,10 @@
     }
 
     async function runParseAndValidate() {
+      const dateISO = selectedTreatmentDateISO();
       const form = new FormData();
-      form.append('geofence_arrival', combineToday($('arrival').value).toISOString());
-      form.append('geofence_departure', combineToday($('departure').value).toISOString());
+      form.append('geofence_arrival', combineOnDate($('arrival').value, dateISO).toISOString());
+      form.append('geofence_departure', combineOnDate($('departure').value, dateISO).toISOString());
       form.append('patient_id', 'mobil-' + Date.now());
       form.append('praxis_name', $('praxisName').value || 'Unbenannte Praxis');
       form.append('total_billed_amount', '0');
@@ -646,10 +687,13 @@
           const detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
           throw new Error(detail || ('HTTP ' + r.status));
         }
-        // Das aus der Rechnung erkannte Behandlungsdatum + Praxisname gegen
-        // das lokale Geofencing-Tagebuch abgleichen (unabhaengiger
-        // Anwesenheitsnachweis fuer eine spaeter eingegangene Rechnung).
-        const geofenceMatch = findGeofenceMatch(data.extracted_treatment_date, data.extracted_praxis_name);
+        // OCR-Behandlungsdatum UND das im Formular gewaehlte Datum gegen
+        // das lokale Geofencing-Tagebuch abgleichen.
+        const geofenceMatch = findGeofenceMatch(
+          data.extracted_treatment_date,
+          data.extracted_praxis_name,
+          dateISO,
+        );
         showResult(data.report, data.parsed_ziffern, geofenceMatch, data.extracted_treatment_date, data.extracted_praxis_name);
       } catch (e) {
         alert('Foto konnte nicht ausgewertet werden:\n' + e.message + '\n\nBitte alternativ „Manuell” nutzen.');
@@ -698,7 +742,7 @@
               </div>
               <div class="bg-white/70 rounded-lg px-2.5 py-2">
                 <div class="text-emerald-600/70">Datum</div>
-                <div class="font-bold text-emerald-800">${formatDateDE(geofenceMatch.dateISO)}</div>
+                <div class="font-bold text-emerald-800">${geofenceMatch.dateDE || formatDateDE(geofenceMatch.dateISO)}</div>
               </div>
               <div class="bg-white/70 rounded-lg px-2.5 py-2">
                 <div class="text-emerald-600/70">Ankunft / Abfahrt</div>
