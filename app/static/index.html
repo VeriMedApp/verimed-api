@@ -1095,7 +1095,7 @@
     function buildObjectionLetter({ praxisName, invoiceNum, dateDE, anomalies, data, geofenceMatch }) {
       const issues = (anomalies || [])
         .filter(a => a.type === 'time_anomaly' || a.type === 'exclusion_anomaly' || a.type === 'multiplier_anomaly')
-        .map((a, i) => `${i + 1}. ${formatAnomalyBullet(a, data, geofenceMatch)}`);
+        .map(a => formatAnomalyBullet(a, data, geofenceMatch));
       const arrival = geofenceMatch?.arrival || '–';
       const departure = geofenceMatch?.departure || '–';
       const duration = geofenceMatch?.durationMinutes ?? Math.round(data.actual_duration_minutes || 0);
@@ -1106,7 +1106,7 @@
         '',
         'Bei der Prüfung der Abrechnung wurden folgende Unstimmigkeiten festgestellt:',
         '',
-        ...issues,
+        ...issues.map((item, i) => `${i + 1}. ${item}`),
         '',
         'Geofencing-Nachweis (tatsächliche Anwesenheit):',
         `Ankunft: ${arrival} Uhr`,
@@ -1117,7 +1117,36 @@
         '',
         'Mit freundlichen Grüßen',
       ];
-      return lines.join('\n');
+      return { body: lines.join('\n'), issues };
+    }
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[c]));
+    }
+    function encodeMailtoBody(text) {
+      const crlf = String(text || '').replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+      return encodeURIComponent(crlf);
+    }
+    const EMAIL_PRESETS = [
+      { id: 'ocr', label: 'Praxis direkt (aus Foto/OCR)', email: null },
+      { id: 'pvs', label: 'PVS (Privatärztliche Verrechnungsstelle)', email: 'einspruch@pvs.de' },
+      { id: 'mediserv', label: 'Mediserv AG', email: 'abrechnung@mediserv.de' },
+      { id: 'buedingen', label: 'Ärztekasse / Büdingen', email: 'service@buedingen-med.de' },
+      { id: 'manual', label: 'Manuelle Eingabe', email: '' },
+    ];
+    function applyObjectionPreset(presetId) {
+      const preset = EMAIL_PRESETS.find(p => p.id === presetId) || EMAIL_PRESETS[0];
+      const input = $('objectionEmail');
+      if (!input) return;
+      if (preset.id === 'ocr') input.value = detectedPracticeEmail || '';
+      else if (preset.id === 'manual') {
+        input.value = '';
+        input.focus();
+      } else input.value = preset.email || '';
+    }
+    function onObjectionPresetChange() {
+      applyObjectionPreset($('objectionPreset')?.value || 'ocr');
     }
     function currentObjectionEmail() {
       return ($('objectionEmail')?.value || detectedPracticeEmail || '').trim();
@@ -1130,56 +1159,127 @@
       const targetEmail = currentObjectionEmail();
       const invoiceNum = lastObjection.invoiceNum || '';
       const body = currentObjectionBody();
-      const href = `mailto:${targetEmail}?subject=${encodeURIComponent('Einwand Rechnung ' + invoiceNum)}&body=${encodeURIComponent(body)}`;
+      const href = `mailto:${targetEmail}?subject=${encodeURIComponent('Einwand Rechnung ' + invoiceNum)}&body=${encodeMailtoBody(body)}`;
       lastObjection.mailtoHref = href;
-      window.location.href = href;
+      const opener = document.createElement('a');
+      opener.href = href;
+      opener.style.display = 'none';
+      document.body.appendChild(opener);
+      opener.click();
+      opener.remove();
     }
     function copyObjectionText() {
       const body = currentObjectionBody();
       if (!body) return;
       const done = () => showToast('🟢 Widerspruchstext in die Zwischenablage kopiert!');
-      if (navigator.clipboard?.writeText) {
-        navigator.clipboard.writeText(body).then(done).catch(() => {
-          $('objectionPreview')?.select();
-          document.execCommand('copy');
-          done();
-        });
-      } else {
+      const o = lastObjection || {};
+      const lis = (o.issues || []).map(item => {
+        const idx = item.indexOf(':');
+        if (idx > 0) {
+          return `<li><strong>${escapeHtml(item.slice(0, idx + 1))}</strong>${escapeHtml(item.slice(idx + 1))}</li>`;
+        }
+        return `<li>${escapeHtml(item)}</li>`;
+      }).join('');
+      const g = o.geofenceMatch;
+      const geo = g ? `<p><strong>Geofencing-Nachweis (tatsächliche Anwesenheit)</strong><br>Ankunft: ${escapeHtml(g.arrival || '–')} Uhr<br>Abfahrt: ${escapeHtml(g.departure || '–')} Uhr<br>Dauer: ${escapeHtml(String(g.durationMinutes ?? '–'))} Minuten</p>` : '';
+      const html = `<div><p>Sehr geehrte Damen und Herren,</p><p>hiermit lege ich formell Einwand gegen die Rechnung Nr. <strong>${escapeHtml(o.invoiceNum || 'unbekannt')}</strong> der <strong>${escapeHtml(o.praxisName || '')}</strong> vom <strong>${escapeHtml(o.dateDE || '')}</strong> ein.</p><p><strong>Festgestellte Unstimmigkeiten</strong></p><ul>${lis}</ul>${geo}<p>Ich fordere Sie daher auf, die Rechnung zu prüfen und eine korrigierte Abrechnung auszustellen.</p><p>Mit freundlichen Grüßen</p></div>`;
+      const fallback = () => {
         $('objectionPreview')?.select();
         document.execCommand('copy');
         done();
-      }
+      };
+      const writeHtml = async () => {
+        if (navigator.clipboard?.write && window.ClipboardItem) {
+          await navigator.clipboard.write([new ClipboardItem({
+            'text/plain': new Blob([body], { type: 'text/plain;charset=utf-8' }),
+            'text/html': new Blob([html], { type: 'text/html;charset=utf-8' }),
+          })]);
+          done();
+          return;
+        }
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(body);
+          done();
+          return;
+        }
+        fallback();
+      };
+      writeHtml().catch(fallback);
+    }
+    function buildObjectionPrintHtml() {
+      const o = lastObjection || {};
+      const g = o.geofenceMatch;
+      const lis = (o.issues || []).map(item => `<li>${escapeHtml(item)}</li>`).join('') || '<li>Unstimmigkeiten laut ProofMed-Prüfung.</li>';
+      const geoBox = g ? `<section class="geo"><h2>Geofencing-Nachweis</h2><table><tr><td>Praxis</td><td><strong>${escapeHtml(g.praxisName || o.praxisName || '')}</strong></td></tr><tr><td>Datum</td><td><strong>${escapeHtml(g.dateDE || formatDateDE(g.dateISO) || o.dateDE || '')}</strong></td></tr><tr><td>Ankunft / Abfahrt</td><td><strong>${escapeHtml(g.arrival || '–')}–${escapeHtml(g.departure || '–')} Uhr</strong></td></tr><tr><td>Nachgewiesene Dauer</td><td><strong>${escapeHtml(String(g.durationMinutes ?? '–'))} Min</strong></td></tr></table></section>` : `<section class="geo"><h2>Geofencing-Nachweis</h2><p>Kein passender Tagebuch-Eintrag hinterlegt.</p></section>`;
+      return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"/><title>Formeller Einwand gegen Liquidation</title>
+<style>
+@page { size: A4 portrait; margin: 18mm 16mm; }
+html, body { margin: 0; padding: 0; background: #fff; color: #0f172a; }
+body { font-family: "Times New Roman", Times, serif; font-size: 11pt; line-height: 1.45; }
+.sheet { box-sizing: border-box; width: 210mm; min-height: 297mm; }
+.kicker { font-family: Arial, Helvetica, sans-serif; font-size: 8.5pt; letter-spacing: .14em; text-transform: uppercase; color: #64748b; margin: 0 0 3mm; }
+h1 { font-family: Arial, Helvetica, sans-serif; font-size: 18pt; font-weight: 800; margin: 0 0 8mm; line-height: 1.2; }
+.header { width: 100%; border-collapse: collapse; margin-bottom: 7mm; }
+.header td { width: 50%; vertical-align: top; padding: 0 6mm 3mm 0; }
+.label { font-family: Arial, Helvetica, sans-serif; font-size: 8pt; text-transform: uppercase; letter-spacing: .06em; color: #64748b; }
+.value { font-size: 11pt; margin-top: 1mm; }
+.geo { border: 2.5px solid #059669; background: #ecfdf5; padding: 4.5mm 5mm; margin: 0 0 7mm; }
+.geo h2 { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; color: #047857; margin: 0 0 3mm; }
+.geo table { width: 100%; border-collapse: collapse; font-size: 10.5pt; }
+.geo td:first-child { color: #047857; width: 42%; padding: 1mm 0; }
+h3 { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; margin: 5mm 0 2mm; }
+ol { margin: 0 0 6mm 6mm; padding: 0; }
+ol li { margin: 0 0 2mm; }
+.sign { margin-top: 16mm; }
+.sign-line { margin-top: 14mm; border-bottom: 1px solid #0f172a; width: 72mm; }
+.sign-caption { font-family: Arial, Helvetica, sans-serif; font-size: 8.5pt; color: #64748b; margin-top: 2mm; }
+@media print { html, body { width: auto; height: auto; background: #fff; } .sheet { width: auto; min-height: auto; } }
+</style></head><body><article class="sheet">
+<div class="kicker">ProofMed · Patienten-Einwand</div>
+<h1>Formeller Einwand gegen Liquidation</h1>
+<table class="header"><tr>
+<td><div class="label">Praxis / Leistungserbringer</div><div class="value"><strong>${escapeHtml(o.praxisName || '–')}</strong></div></td>
+<td><div class="label">Patient</div><div class="value">Privatpatient / über ProofMed geprüft</div></td>
+</tr><tr>
+<td><div class="label">Rechnungsnummer</div><div class="value">${escapeHtml(o.invoiceNum || 'unbekannt')}</div></td>
+<td><div class="label">Behandlungsdatum</div><div class="value">${escapeHtml(o.dateDE || '–')}</div></td>
+</tr><tr>
+<td><div class="label">Empfänger</div><div class="value">${escapeHtml(currentObjectionEmail() || '–')}</div></td>
+<td><div class="label">Datum des Einwands</div><div class="value">${escapeHtml(formatDateDE(todayISODate()))}</div></td>
+</tr></table>
+${geoBox}
+<p>Sehr geehrte Damen und Herren, hiermit lege ich formell Einwand gegen die oben bezeichnete Liquidation ein.</p>
+<h3>Konkrete Abrechnungseinwände</h3>
+<ol>${lis}</ol>
+<p>Ich fordere Sie auf, die Rechnung zu prüfen und eine korrigierte Abrechnung auszustellen.</p>
+<div class="sign"><div>Mit freundlichen Grüßen</div><div class="sign-line"></div><div class="sign-caption">Unterschrift Patientin / Patient</div></div>
+</article></body></html>`;
     }
     function printObjectionPdf() {
       if (!lastObjection) return;
-      const body = currentObjectionBody().replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-      const g = lastObjection.geofenceMatch;
-      const badge = g ? `
-        <div style="margin-top:18px;padding:14px 16px;border:2px solid #059669;border-radius:12px;background:#ecfdf5;">
-          <div style="font-weight:800;color:#047857;margin-bottom:8px;">Geofencing-Nachweis</div>
-          <div>Praxis: <strong>${g.praxisName || ''}</strong></div>
-          <div>Datum: <strong>${g.dateDE || formatDateDE(g.dateISO) || ''}</strong></div>
-          <div>Ankunft / Abfahrt: <strong>${g.arrival || '–'}–${g.departure || '–'} Uhr</strong></div>
-          <div>Nachgewiesene Dauer: <strong>${g.durationMinutes || '–'} Min</strong></div>
-        </div>` : '';
-      const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"/><title>Einwand Rechnung ${lastObjection.invoiceNum}</title>
-        <style>
-          body { font-family: Georgia, 'Times New Roman', serif; color: #0f172a; max-width: 720px; margin: 32px auto; padding: 0 24px; }
-          h1 { font-family: Inter, system-ui, sans-serif; font-size: 20px; }
-          pre { white-space: pre-wrap; font-family: inherit; line-height: 1.55; }
-          .meta { font-family: Inter, system-ui, sans-serif; font-size: 12px; color: #64748b; margin-bottom: 16px; }
-        </style></head><body>
-          <h1>Rechtssicherer Einwand</h1>
-          <div class="meta">Empfänger: ${currentObjectionEmail() || '–'} · Rechnung ${lastObjection.invoiceNum}</div>
-          <pre>${body}</pre>
-          ${badge}
-        </body></html>`;
-      const w = window.open('', '_blank', 'noopener,noreferrer,width=800,height=900');
-      if (!w) { alert('Pop-up blockiert. Bitte Pop-ups für ProofMed erlauben.'); return; }
-      w.document.write(html);
-      w.document.close();
-      w.focus();
-      w.print();
+      const html = buildObjectionPrintHtml();
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      let iframe = document.getElementById('objectionPrintFrame');
+      if (iframe) {
+        URL.revokeObjectURL(iframe.dataset.blobUrl || '');
+        iframe.remove();
+      }
+      iframe = document.createElement('iframe');
+      iframe.id = 'objectionPrintFrame';
+      iframe.title = 'Einwand-Druckvorschau';
+      iframe.setAttribute('aria-hidden', 'true');
+      iframe.dataset.blobUrl = url;
+      iframe.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;border:0;pointer-events:none;';
+      const triggerPrint = () => {
+        const win = iframe.contentWindow;
+        if (!win) return;
+        try { win.focus(); } catch { /* ignore */ }
+        setTimeout(() => { try { win.print(); } catch { /* ignore */ } }, 80);
+      };
+      iframe.addEventListener('load', triggerPrint, { once: true });
+      document.body.appendChild(iframe);
+      iframe.src = url;
     }
 
     function showResult(report, parsedZiffern, geofenceMatch, extractedDate, extractedPraxis, ocrMeta) {
@@ -1190,13 +1290,15 @@
       const dateDE = formatDateDE(extractedDate) || formatDateDE(geofenceMatch?.dateISO) || formatDateDE(selectedTreatmentDateISO());
       const anomalies = report.anomalies || [];
       if (hasBillingDiscrepancy(anomalies)) {
+        const letter = buildObjectionLetter({ praxisName, invoiceNum, dateDE, anomalies, data: report, geofenceMatch });
         lastObjection = {
           invoiceNum,
           praxisName,
           dateDE,
           email: detectedPracticeEmail,
           geofenceMatch: geofenceMatch || null,
-          body: buildObjectionLetter({ praxisName, invoiceNum, dateDE, anomalies, data: report, geofenceMatch }),
+          body: letter.body,
+          issues: letter.issues,
           mailtoHref: '',
         };
       } else {
@@ -1204,7 +1306,12 @@
       }
       $('resultContent').innerHTML = renderResultHtml(report, parsedZiffern, geofenceMatch, extractedDate, extractedPraxis);
       if ($('objectionPreview') && lastObjection) $('objectionPreview').value = lastObjection.body;
-      if ($('objectionEmail')) $('objectionEmail').value = detectedPracticeEmail;
+      if ($('objectionPreset')) {
+        $('objectionPreset').value = detectedPracticeEmail ? 'ocr' : 'manual';
+        applyObjectionPreset($('objectionPreset').value);
+      } else if ($('objectionEmail')) {
+        $('objectionEmail').value = detectedPracticeEmail;
+      }
       $('resultOverlay').classList.remove('hidden');
       $('resultOverlay').scrollTop = 0;
       document.body.style.overflow = 'hidden';
@@ -1338,6 +1445,11 @@
             Formelles Widerspruchsschreiben an die Praxis — vorbereitet aus den festgestellten Unstimmigkeiten
             und dem Geofencing-Nachweis.
           </p>
+          <label for="objectionPreset" class="block text-xs font-medium text-slate-500 mb-1">Empfänger-Vorlage</label>
+          <select id="objectionPreset" onchange="onObjectionPresetChange()"
+            class="w-full text-sm rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 mb-3 focus:ring-2 focus:ring-brand-500 outline-none">
+            ${EMAIL_PRESETS.map(p => `<option value="${p.id}">${p.label}</option>`).join('')}
+          </select>
           <label for="objectionEmail" class="block text-xs font-medium text-slate-500 mb-1">Empfänger-E-Mail</label>
           <input id="objectionEmail" type="email" placeholder="z. B. info@praxis.de"
             class="w-full text-sm rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 mb-3 focus:ring-2 focus:ring-brand-500 outline-none" />
