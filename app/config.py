@@ -56,6 +56,16 @@ class Settings(BaseSettings):
     # --- Logging -------------------------------------------------------------
     LOG_LEVEL: str = "INFO"
 
+    # --- SMTP / Einwand-Versand ---------------------------------------------
+    # Ohne SMTP_HOST und SMTP_FROM antwortet /api/v1/send-objection mit einem
+    # erfolgreichen Mock (kein echter Versand).
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_STARTTLS: bool = True
+
     @property
     def async_database_url(self) -> str:
         """Normalisiert DATABASE_URL fuer SQLAlchemy async (Render liefert postgresql://)."""
@@ -84,6 +94,11 @@ class Settings(BaseSettings):
             self.DATABASE_URL.replace("+aiosqlite", "")
             .replace("+asyncpg", "+psycopg2")
         )
+
+    @property
+    def smtp_configured(self) -> bool:
+        """True, wenn ein echter SMTP-Versand moeglich ist."""
+        return bool((self.SMTP_HOST or "").strip() and (self.SMTP_FROM or "").strip())
 
 
 @lru_cache

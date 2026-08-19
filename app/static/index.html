@@ -170,6 +170,7 @@
               <span id="liveVisitStatus">Aktiv in der Praxis</span>
             </div>
             <div id="liveVisitPraxis" class="text-xs text-emerald-700/80 mt-0.5 truncate"></div>
+            <div id="liveGpsNote" class="hidden text-xs text-emerald-700 mt-1 font-medium"></div>
             <div id="liveRoomNote" class="hidden text-xs text-emerald-700 mt-1 font-medium"></div>
           </div>
           <div class="text-right shrink-0">
@@ -327,6 +328,7 @@
       mail: '<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
       copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
       printer: '<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/>',
+      send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
     };
     function icon(name, cls) {
       return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls || 'h-5 w-5'} shrink-0">${ICON_PATHS[name] || ICON_PATHS.info}</svg>`;
@@ -408,26 +410,113 @@
         console.warn('Geofencing-Tagebuch konnte nicht gespeichert werden:', e);
       }
     }
-    function addGeofenceLogEntry({ praxisName, dateISO, dateDE, arrival, departure, durationMinutes: mins, source, treatmentStart }) {
-      const iso = dateISO || selectedTreatmentDateISO();
+    function hasGpsCoords(obj) {
+      return obj != null && Number.isFinite(Number(obj.lat)) && Number.isFinite(Number(obj.lng));
+    }
+    function pickGpsFields(obj) {
+      if (!obj) return { lat: null, lng: null, accuracy: null, timestamp: new Date().toISOString() };
+      return {
+        lat: hasGpsCoords(obj) ? Number(obj.lat) : null,
+        lng: hasGpsCoords(obj) ? Number(obj.lng) : null,
+        accuracy: obj.accuracy != null && Number.isFinite(Number(obj.accuracy)) ? Number(obj.accuracy) : null,
+        timestamp: obj.timestamp || new Date().toISOString(),
+      };
+    }
+    function captureGpsMetadata() {
+      return new Promise((resolve) => {
+        const fallback = () => resolve({ lat: null, lng: null, accuracy: null, timestamp: new Date().toISOString() });
+        if (!navigator.geolocation) return fallback();
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+            timestamp: new Date(pos.timestamp || Date.now()).toISOString(),
+          }),
+          fallback,
+          { enableHighAccuracy: true, timeout: 8000, maximumAge: 15000 },
+        );
+      });
+    }
+    async function computeAuditHash({ dateISO, lat, lng, durationMinutes }) {
+      const coordPart = hasGpsCoords({ lat, lng })
+        ? `${Number(lat).toFixed(6)}|${Number(lng).toFixed(6)}`
+        : 'NO_GPS';
+      const payload = `${dateISO || ''}|${coordPart}|${durationMinutes ?? ''}`;
+      if (!crypto?.subtle) return '';
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(payload));
+      return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    function captureMethodLabel(entry) {
+      const t = entry?.logType || (entry?.source === 'live' ? 'GPS_LIVE' : 'MANUAL_ENTRY');
+      return t === 'GPS_LIVE' ? 'GPS Live-Sensor Check-in' : 'Manueller Nachtrag';
+    }
+    function formatGpsLine(entry) {
+      if (!hasGpsCoords(entry)) {
+        return 'GPS nicht verfügbar (Geräteberechtigung oder Sensor nicht vorhanden)';
+      }
+      const latH = Number(entry.lat) >= 0 ? 'N' : 'S';
+      const lngH = Number(entry.lng) >= 0 ? 'E' : 'W';
+      const acc = entry.accuracy != null ? ` (Genauigkeit: ±${Math.round(entry.accuracy)}m)` : '';
+      return `${Math.abs(Number(entry.lat)).toFixed(4)}° ${latH}, ${Math.abs(Number(entry.lng)).toFixed(4)}° ${lngH}${acc}`;
+    }
+    function formatTimeWindow(entry) {
+      const arr = entry?.arrival || '–';
+      const dep = entry?.departure || '–';
+      return `Ankunft ${arr} Uhr – Abfahrt ${dep} Uhr`;
+    }
+    async function ensureDiaryAuditFields(entry) {
+      if (!entry) return null;
+      if (!entry.logType) entry.logType = entry.source === 'live' ? 'GPS_LIVE' : 'MANUAL_ENTRY';
+      if (!entry.timestamp) entry.timestamp = new Date().toISOString();
+      if (!entry.auditHash) {
+        entry.auditHash = await computeAuditHash(entry);
+        if (entry.id) {
+          const entries = loadGeofenceLog();
+          const idx = entries.findIndex(e => e.id === entry.id);
+          if (idx >= 0) {
+            entries[idx] = { ...entries[idx], auditHash: entry.auditHash, logType: entry.logType, timestamp: entry.timestamp };
+            saveGeofenceLog(entries);
+          }
+        }
+      }
+      return entry;
+    }
+    function addGeofenceLogEntry(payload) {
+      const iso = payload.dateISO || selectedTreatmentDateISO();
+      const gps = pickGpsFields(payload);
       const entries = loadGeofenceLog();
       entries.unshift({
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        praxisName,
+        praxisName: payload.praxisName,
         dateISO: iso,
-        dateDE: dateDE || formatDateDE(iso),
-        arrival, departure,
-        durationMinutes: Math.max(1, Math.round(mins)),
-        treatmentStart: treatmentStart || null,
-        source: source || 'manual',
+        dateDE: payload.dateDE || formatDateDE(iso),
+        arrival: payload.arrival,
+        departure: payload.departure,
+        durationMinutes: Math.max(1, Math.round(payload.durationMinutes)),
+        treatmentStart: payload.treatmentStart || null,
+        source: payload.source || 'manual',
+        logType: payload.logType || (payload.source === 'live' ? 'GPS_LIVE' : 'MANUAL_ENTRY'),
+        lat: gps.lat,
+        lng: gps.lng,
+        accuracy: gps.accuracy,
+        timestamp: gps.timestamp,
+        auditHash: payload.auditHash || '',
         createdAt: Date.now(),
       });
       saveGeofenceLog(entries);
       renderGeofenceLog();
       return entries[0];
     }
-    function persistDiaryVisit(payload) {
-      const entry = addGeofenceLogEntry(payload);
+    async function persistDiaryVisit(payload) {
+      const gps = hasGpsCoords(payload) ? pickGpsFields(payload) : await captureGpsMetadata();
+      const merged = {
+        ...payload,
+        ...gps,
+        logType: payload.logType || (payload.source === 'live' ? 'GPS_LIVE' : 'MANUAL_ENTRY'),
+      };
+      merged.auditHash = await computeAuditHash(merged);
+      const entry = addGeofenceLogEntry(merged);
       const select = $('auditDiarySelect');
       if (select && entry?.id) select.value = entry.id;
       showToast('🟢 Praxisbesuch erfolgreich im Tagebuch gespeichert!');
@@ -469,7 +558,7 @@
         <div class="flex items-center justify-between gap-2 text-sm bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5">
           <div class="min-w-0">
             <div class="font-semibold text-slate-700 truncate">${e.praxisName}</div>
-            <div class="text-xs text-slate-400">${e.dateDE || formatDateDE(e.dateISO)} &middot; ${e.arrival}–${e.departure} Uhr${e.treatmentStart ? ` · Zimmer ${e.treatmentStart}` : ''}</div>
+            <div class="text-xs text-slate-400">${e.dateDE || formatDateDE(e.dateISO)} &middot; ${e.arrival}–${e.departure} Uhr${e.treatmentStart ? ` · Zimmer ${e.treatmentStart}` : ''}${hasGpsCoords(e) ? ` · GPS ${Number(e.lat).toFixed(4)}, ${Number(e.lng).toFixed(4)}` : ''}</div>
           </div>
           <div class="shrink-0 text-xs font-bold bg-brand-50 text-brand-700 px-2 py-1 rounded-full">Aufenthalt: ${e.durationMinutes} Min</div>
         </div>`).join('');
@@ -484,14 +573,15 @@
         .trim();
     }
     function findGeofenceMatch(extractedDateISO, extractedPraxisName, selectedDateISO) {
-      if (!extractedPraxisName) return null;
-      const target = normalizePraxisName(extractedPraxisName);
-      if (!target) return null;
-      const selectedISO = selectedDateISO || selectedTreatmentDateISO();
       const entries = loadGeofenceLog();
+      if (!entries.length) return null;
+      const selectedISO = selectedDateISO || selectedTreatmentDateISO();
+      const target = normalizePraxisName(extractedPraxisName || $('praxisName')?.value || '');
       const praxisMatch = (e) => {
+        if (!target) return true;
         const n = normalizePraxisName(e.praxisName);
-        return n && (n.includes(target) || target.includes(n));
+        if (!n) return true;
+        return n.includes(target) || target.includes(n);
       };
       // Bevorzugt Eintraege, bei denen OCR-Datum UND gewaehltes
       // Behandlungsdatum mit dem Tagebuch-Eintrag uebereinstimmen.
@@ -507,7 +597,46 @@
         const bySelected = entries.find(e => e.dateISO === selectedISO && praxisMatch(e));
         if (bySelected) return bySelected;
       }
-      return null;
+      const dateKey = extractedDateISO || selectedISO;
+      if (dateKey) {
+        const byDate = entries.find(e => e.dateISO === dateKey);
+        if (byDate) return byDate;
+      }
+      const audit = getSelectedAuditEntry();
+      if (audit) return audit;
+      return entries[0] || null;
+    }
+    function resolveDiaryProof(extractedDateISO, extractedPraxisName) {
+      const matched = findGeofenceMatch(extractedDateISO, extractedPraxisName, selectedTreatmentDateISO());
+      if (matched) return matched;
+      const audit = getSelectedAuditEntry();
+      if (audit) return audit;
+      const times = resolveGeofenceTimes();
+      if (times) {
+        const entries = loadGeofenceLog();
+        const exact = entries.find(e =>
+          e.dateISO === times.dateISO && e.arrival === times.arrival && e.departure === times.departure
+        );
+        if (exact) return exact;
+        if (entries[0]) return entries[0];
+        return {
+          praxisName: times.praxisName,
+          dateISO: times.dateISO,
+          dateDE: formatDateDE(times.dateISO),
+          arrival: times.arrival,
+          departure: times.departure,
+          durationMinutes: times.durationMinutes,
+          logType: 'MANUAL_ENTRY',
+        };
+      }
+      return loadGeofenceLog()[0] || null;
+    }
+    function resolvePrintGeofence() {
+      const fromObjection = lastObjection?.geofenceMatch;
+      if (fromObjection && (fromObjection.arrival || fromObjection.dateISO || fromObjection.durationMinutes)) {
+        return fromObjection;
+      }
+      return resolveDiaryProof(null, lastObjection?.praxisName || $('praxisName')?.value);
     }
     $('clearGeofenceLogBtn').addEventListener('click', () => {
       if (!confirm('Geofencing-Tagebuch auf diesem Gerät wirklich löschen?')) return;
@@ -558,6 +687,16 @@
       }
       $('liveVisitStatus').textContent = `🟢 Aktiv in der Praxis seit ${visit.arrival} Uhr`;
       $('liveVisitPraxis').textContent = `${visit.praxisName} · ${visit.dateDE || formatDateDE(visit.dateISO)}`;
+      const gpsNote = $('liveGpsNote');
+      if (gpsNote) {
+        if (hasGpsCoords(visit)) {
+          gpsNote.textContent = `GPS ${formatGpsLine(visit)}`;
+          gpsNote.classList.remove('hidden');
+        } else {
+          gpsNote.textContent = 'GPS-Metadaten nicht verfügbar — Eintrag wird ohne Koordinaten gespeichert.';
+          gpsNote.classList.remove('hidden');
+        }
+      }
       const roomNote = $('liveRoomNote');
       if (visit.treatmentStart) {
         roomNote.textContent = `Behandlungszimmer betreten um ${visit.treatmentStart} Uhr`;
@@ -576,21 +715,33 @@
       stopLiveTicker();
       liveTickTimer = setInterval(tick, 1000);
     }
-    function startLiveCheckIn() {
+    async function startLiveCheckIn() {
       if (loadActiveVisit()) return;
-      const now = new Date();
-      const dateISO = todayISODate();
-      const visit = {
-        praxisName: $('praxisName').value.trim() || 'Unbenannte Praxis',
-        dateISO,
-        dateDE: formatDateDE(dateISO),
-        arrival: fmtTime(now),
-        startedAt: Date.now(),
-        treatmentStart: null,
-        treatmentStartedAt: null,
-      };
-      saveActiveVisit(visit);
-      renderLiveVisit();
+      const btn = $('liveCheckInBtn');
+      const original = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = icon('loader', 'h-5 w-5 animate-spin') + ' GPS wird erfasst …';
+      try {
+        const gps = await captureGpsMetadata();
+        const now = new Date();
+        const dateISO = todayISODate();
+        const visit = {
+          praxisName: $('praxisName').value.trim() || 'Unbenannte Praxis',
+          dateISO,
+          dateDE: formatDateDE(dateISO),
+          arrival: fmtTime(now),
+          startedAt: Date.now(),
+          treatmentStart: null,
+          treatmentStartedAt: null,
+          logType: 'GPS_LIVE',
+          ...gps,
+        };
+        saveActiveVisit(visit);
+        renderLiveVisit();
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = original;
+      }
     }
     function enterTreatmentRoom() {
       const visit = loadActiveVisit();
@@ -601,29 +752,38 @@
       saveActiveVisit(visit);
       renderLiveVisit();
     }
-    function leavePractice() {
+    async function leavePractice() {
       const visit = loadActiveVisit();
       if (!visit) return;
-      const now = new Date();
-      const departure = fmtTime(now);
-      const mins = Math.max(1, Math.round((Date.now() - visit.startedAt) / 60000));
-      persistDiaryVisit({
-        praxisName: visit.praxisName,
-        dateISO: visit.dateISO,
-        dateDE: visit.dateDE,
-        arrival: visit.arrival,
-        departure,
-        durationMinutes: mins,
-        treatmentStart: visit.treatmentStart,
-        source: 'live',
-      });
-      $('arrival').value = visit.arrival;
-      $('departure').value = departure;
-      if ($('treatmentDate')) $('treatmentDate').value = visit.dateISO;
-      if ($('praxisName')) $('praxisName').value = visit.praxisName;
-      saveActiveVisit(null);
-      renderLiveVisit();
-      updateTicker();
+      const btn = $('leavePracticeBtn');
+      if (btn) btn.disabled = true;
+      try {
+        const now = new Date();
+        const departure = fmtTime(now);
+        const mins = Math.max(1, Math.round((Date.now() - visit.startedAt) / 60000));
+        const gps = hasGpsCoords(visit) ? pickGpsFields(visit) : await captureGpsMetadata();
+        await persistDiaryVisit({
+          praxisName: visit.praxisName,
+          dateISO: visit.dateISO,
+          dateDE: visit.dateDE,
+          arrival: visit.arrival,
+          departure,
+          durationMinutes: mins,
+          treatmentStart: visit.treatmentStart,
+          source: 'live',
+          logType: 'GPS_LIVE',
+          ...gps,
+        });
+        $('arrival').value = visit.arrival;
+        $('departure').value = departure;
+        if ($('treatmentDate')) $('treatmentDate').value = visit.dateISO;
+        if ($('praxisName')) $('praxisName').value = visit.praxisName;
+        saveActiveVisit(null);
+        renderLiveVisit();
+        updateTicker();
+      } finally {
+        if (btn) btn.disabled = false;
+      }
     }
     $('liveCheckInBtn').addEventListener('click', startLiveCheckIn);
     $('enterRoomBtn').addEventListener('click', enterTreatmentRoom);
@@ -640,19 +800,30 @@
       if (saveBtn) saveBtn.disabled = !valid;
       updateCTAState();
     }
-    $('saveDiaryBtn').addEventListener('click', () => {
+    $('saveDiaryBtn').addEventListener('click', async () => {
       const m = durationMinutes();
       if (m === null || m <= 0) return;
-      const dateISO = selectedTreatmentDateISO();
-      persistDiaryVisit({
-        praxisName: $('praxisName').value.trim() || 'Unbenannte Praxis',
-        dateISO,
-        dateDE: formatDateDE(dateISO),
-        arrival: $('arrival').value,
-        departure: $('departure').value,
-        durationMinutes: m,
-        source: 'manual',
-      });
+      const btn = $('saveDiaryBtn');
+      const original = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = icon('loader', 'h-5 w-5 animate-spin') + ' GPS wird erfasst …';
+      try {
+        const dateISO = selectedTreatmentDateISO();
+        await persistDiaryVisit({
+          praxisName: $('praxisName').value.trim() || 'Unbenannte Praxis',
+          dateISO,
+          dateDE: formatDateDE(dateISO),
+          arrival: $('arrival').value,
+          departure: $('departure').value,
+          durationMinutes: m,
+          source: 'manual',
+          logType: 'MANUAL_ENTRY',
+        });
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = original;
+        updateTicker();
+      }
     });
     document.querySelectorAll('.quickTimeBtn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -980,8 +1151,8 @@
         });
         const data = await r.json();
         if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : ('HTTP ' + r.status));
-        const geofenceMatch = findGeofenceMatch(times.dateISO, times.praxisName, times.dateISO);
-        showResult(data, null, geofenceMatch, times.dateISO, times.praxisName, {});
+        const geofenceMatch = resolveDiaryProof(times.dateISO, times.praxisName);
+        await showResult(data, null, geofenceMatch, times.dateISO, times.praxisName, {});
       } catch (e) {
         alert('Fehler bei der Prüfung: ' + e.message);
       } finally {
@@ -1012,12 +1183,11 @@
           const detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
           throw new Error(detail || ('HTTP ' + r.status));
         }
-        const geofenceMatch = findGeofenceMatch(
+        const geofenceMatch = resolveDiaryProof(
           data.extracted_treatment_date,
           data.extracted_praxis_name,
-          times.dateISO,
         );
-        showResult(
+        await showResult(
           data.report,
           data.parsed_ziffern,
           geofenceMatch,
@@ -1109,15 +1279,19 @@
         ...issues.map((item, i) => `${i + 1}. ${item}`),
         '',
         'Geofencing-Nachweis (tatsächliche Anwesenheit):',
+        `Erfassungsmethode: ${captureMethodLabel(geofenceMatch)}`,
+        `GPS-Koordinaten: ${formatGpsLine(geofenceMatch)}`,
+        `Zeitfenster: ${formatTimeWindow(geofenceMatch)}`,
         `Ankunft: ${arrival} Uhr`,
         `Abfahrt: ${departure} Uhr`,
         `Dauer: ${duration} Minuten`,
+        geofenceMatch?.auditHash ? `Audit-Hash (SHA-256): ${geofenceMatch.auditHash}` : null,
         '',
         'Ich fordere Sie daher auf, die Rechnung zu prüfen und eine korrigierte Abrechnung auszustellen.',
         '',
         'Mit freundlichen Grüßen',
       ];
-      return { body: lines.join('\n'), issues };
+      return { body: lines.filter(line => line !== null).join('\n'), issues };
     }
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, c => ({
@@ -1180,8 +1354,8 @@
         }
         return `<li>${escapeHtml(item)}</li>`;
       }).join('');
-      const g = o.geofenceMatch;
-      const geo = g ? `<p><strong>Geofencing-Nachweis (tatsächliche Anwesenheit)</strong><br>Ankunft: ${escapeHtml(g.arrival || '–')} Uhr<br>Abfahrt: ${escapeHtml(g.departure || '–')} Uhr<br>Dauer: ${escapeHtml(String(g.durationMinutes ?? '–'))} Minuten</p>` : '';
+      const g = resolvePrintGeofence();
+      const geo = g ? `<p><strong>Fälschungssicherer Geofencing-Audit-Nachweis</strong><br>Erfassungsmethode: ${escapeHtml(captureMethodLabel(g))}<br>GPS-Koordinaten: ${escapeHtml(formatGpsLine(g))}<br>Zeitfenster: ${escapeHtml(formatTimeWindow(g))}<br>Dauer: ${escapeHtml(String(g.durationMinutes ?? '–'))} Minuten${g.auditHash ? `<br>Audit-Hash: ${escapeHtml(g.auditHash)}` : ''}</p>` : '';
       const html = `<div><p>Sehr geehrte Damen und Herren,</p><p>hiermit lege ich formell Einwand gegen die Rechnung Nr. <strong>${escapeHtml(o.invoiceNum || 'unbekannt')}</strong> der <strong>${escapeHtml(o.praxisName || '')}</strong> vom <strong>${escapeHtml(o.dateDE || '')}</strong> ein.</p><p><strong>Festgestellte Unstimmigkeiten</strong></p><ul>${lis}</ul>${geo}<p>Ich fordere Sie daher auf, die Rechnung zu prüfen und eine korrigierte Abrechnung auszustellen.</p><p>Mit freundlichen Grüßen</p></div>`;
       const fallback = () => {
         $('objectionPreview')?.select();
@@ -1206,11 +1380,31 @@
       };
       writeHtml().catch(fallback);
     }
+    function buildGeoAuditBoxHtml(g, o) {
+      if (!g) {
+        return `<section class="geo"><h2>📍 Fälschungssicherer Geofencing-Audit-Nachweis</h2><p>Kein passender Tagebuch-Eintrag hinterlegt.</p></section>`;
+      }
+      const hash = g.auditHash
+        ? `<tr><td>Audit-Hash</td><td class="hash">${escapeHtml(g.auditHash)}</td></tr>`
+        : '';
+      return `<section class="geo">
+        <div class="badge">📍 Fälschungssicherer Geofencing-Audit-Nachweis</div>
+        <table>
+          <tr><td>Erfassungsmethode</td><td><strong>${escapeHtml(captureMethodLabel(g))}</strong></td></tr>
+          <tr><td>GPS-Koordinaten</td><td><strong>${escapeHtml(formatGpsLine(g))}</strong></td></tr>
+          <tr><td>Zeitfenster</td><td><strong>${escapeHtml(formatTimeWindow(g))}</strong></td></tr>
+          <tr><td>Praxis</td><td><strong>${escapeHtml(g.praxisName || o.praxisName || '')}</strong></td></tr>
+          <tr><td>Datum</td><td><strong>${escapeHtml(g.dateDE || formatDateDE(g.dateISO) || o.dateDE || '')}</strong></td></tr>
+          <tr><td>Nachgewiesene Dauer</td><td><strong>${escapeHtml(String(g.durationMinutes ?? '–'))} Min</strong></td></tr>
+          ${hash}
+        </table>
+      </section>`;
+    }
     function buildObjectionPrintHtml() {
       const o = lastObjection || {};
-      const g = o.geofenceMatch;
+      const g = resolvePrintGeofence();
       const lis = (o.issues || []).map(item => `<li>${escapeHtml(item)}</li>`).join('') || '<li>Unstimmigkeiten laut ProofMed-Prüfung.</li>';
-      const geoBox = g ? `<section class="geo"><h2>Geofencing-Nachweis</h2><table><tr><td>Praxis</td><td><strong>${escapeHtml(g.praxisName || o.praxisName || '')}</strong></td></tr><tr><td>Datum</td><td><strong>${escapeHtml(g.dateDE || formatDateDE(g.dateISO) || o.dateDE || '')}</strong></td></tr><tr><td>Ankunft / Abfahrt</td><td><strong>${escapeHtml(g.arrival || '–')}–${escapeHtml(g.departure || '–')} Uhr</strong></td></tr><tr><td>Nachgewiesene Dauer</td><td><strong>${escapeHtml(String(g.durationMinutes ?? '–'))} Min</strong></td></tr></table></section>` : `<section class="geo"><h2>Geofencing-Nachweis</h2><p>Kein passender Tagebuch-Eintrag hinterlegt.</p></section>`;
+      const geoBox = buildGeoAuditBoxHtml(g, o);
       return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"/><title>Formeller Einwand gegen Liquidation</title>
 <style>
 @page { size: A4 portrait; margin: 18mm 16mm; }
@@ -1224,9 +1418,11 @@ h1 { font-family: Arial, Helvetica, sans-serif; font-size: 18pt; font-weight: 80
 .label { font-family: Arial, Helvetica, sans-serif; font-size: 8pt; text-transform: uppercase; letter-spacing: .06em; color: #64748b; }
 .value { font-size: 11pt; margin-top: 1mm; }
 .geo { border: 2.5px solid #059669; background: #ecfdf5; padding: 4.5mm 5mm; margin: 0 0 7mm; }
+.geo .badge { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; font-weight: 800; color: #047857; margin: 0 0 3mm; }
 .geo h2 { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; color: #047857; margin: 0 0 3mm; }
 .geo table { width: 100%; border-collapse: collapse; font-size: 10.5pt; }
-.geo td:first-child { color: #047857; width: 42%; padding: 1mm 0; }
+.geo td:first-child { color: #047857; width: 38%; padding: 1.2mm 0; vertical-align: top; }
+.geo td.hash { font-family: Consolas, "Courier New", monospace; font-size: 8pt; word-break: break-all; }
 h3 { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; margin: 5mm 0 2mm; }
 ol { margin: 0 0 6mm 6mm; padding: 0; }
 ol li { margin: 0 0 2mm; }
@@ -1255,8 +1451,9 @@ ${geoBox}
 <div class="sign"><div>Mit freundlichen Grüßen</div><div class="sign-line"></div><div class="sign-caption">Unterschrift Patientin / Patient</div></div>
 </article></body></html>`;
     }
-    function printObjectionPdf() {
+    async function printObjectionPdf() {
       if (!lastObjection) return;
+      lastObjection.geofenceMatch = await ensureDiaryAuditFields(resolvePrintGeofence());
       const html = buildObjectionPrintHtml();
       const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
       const url = URL.createObjectURL(blob);
@@ -1282,21 +1479,67 @@ ${geoBox}
       iframe.src = url;
     }
 
-    function showResult(report, parsedZiffern, geofenceMatch, extractedDate, extractedPraxis, ocrMeta) {
+    async function sendObjectionFromApp() {
+      if (!lastObjection) return;
+      const email = currentObjectionEmail();
+      if (!email) {
+        showToast('Bitte Empfänger-E-Mail angeben.');
+        $('objectionEmail')?.focus();
+        return;
+      }
+      const btn = $('sendObjectionBtn');
+      const original = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = icon('loader', 'h-4 w-4 animate-spin') + ' Sende …';
+      }
+      try {
+        lastObjection.geofenceMatch = await ensureDiaryAuditFields(resolvePrintGeofence());
+        const bodyText = currentObjectionBody();
+        const bodyHtml = `<div style="font-family:Georgia,serif;line-height:1.5;white-space:pre-wrap">${escapeHtml(bodyText)}</div>`;
+        const r = await fetch('/api/v1/send-objection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            recipient_email: email,
+            subject: 'Einwand Rechnung ' + (lastObjection.invoiceNum || ''),
+            body_html: bodyHtml,
+            invoice_number: lastObjection.invoiceNum || '',
+            practice_name: lastObjection.praxisName || '',
+          }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok || !data.success) {
+          const detail = typeof data.detail === 'string' ? data.detail : (data.message || ('HTTP ' + r.status));
+          throw new Error(detail);
+        }
+        showToast(`🟢 Einwand erfolgreich an ${email} gesendet!`);
+      } catch (e) {
+        alert('E-Mail konnte nicht gesendet werden: ' + e.message);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = original;
+        }
+      }
+    }
+
+    async function showResult(report, parsedZiffern, geofenceMatch, extractedDate, extractedPraxis, ocrMeta) {
       ocrMeta = ocrMeta || {};
       detectedPracticeEmail = ocrMeta.email || extractEmailFromText(ocrMeta.rawText) || '';
       const invoiceNum = ocrMeta.invoiceNumber || extractInvoiceNumberFromText(ocrMeta.rawText) || 'unbekannt';
       const praxisName = extractedPraxis || report.praxis_name || $('praxisName')?.value || 'Unbenannte Praxis';
-      const dateDE = formatDateDE(extractedDate) || formatDateDE(geofenceMatch?.dateISO) || formatDateDE(selectedTreatmentDateISO());
+      const proof = await ensureDiaryAuditFields(geofenceMatch || resolveDiaryProof(extractedDate, extractedPraxis || praxisName));
+      const dateDE = formatDateDE(extractedDate) || formatDateDE(proof?.dateISO) || formatDateDE(selectedTreatmentDateISO());
       const anomalies = report.anomalies || [];
       if (hasBillingDiscrepancy(anomalies)) {
-        const letter = buildObjectionLetter({ praxisName, invoiceNum, dateDE, anomalies, data: report, geofenceMatch });
+        const letter = buildObjectionLetter({ praxisName, invoiceNum, dateDE, anomalies, data: report, geofenceMatch: proof });
         lastObjection = {
           invoiceNum,
           praxisName,
           dateDE,
           email: detectedPracticeEmail,
-          geofenceMatch: geofenceMatch || null,
+          geofenceMatch: proof || null,
           body: letter.body,
           issues: letter.issues,
           mailtoHref: '',
@@ -1304,7 +1547,7 @@ ${geoBox}
       } else {
         lastObjection = null;
       }
-      $('resultContent').innerHTML = renderResultHtml(report, parsedZiffern, geofenceMatch, extractedDate, extractedPraxis);
+      $('resultContent').innerHTML = renderResultHtml(report, parsedZiffern, proof, extractedDate, extractedPraxis);
       if ($('objectionPreview') && lastObjection) $('objectionPreview').value = lastObjection.body;
       if ($('objectionPreset')) {
         $('objectionPreset').value = detectedPracticeEmail ? 'ocr' : 'manual';
@@ -1350,6 +1593,14 @@ ${geoBox}
                 <div class="text-emerald-600/70">Nachgewiesene Dauer</div>
                 <div class="font-bold text-emerald-800">${geofenceMatch.durationMinutes} Min</div>
               </div>
+              <div class="bg-white/70 rounded-lg px-2.5 py-2 col-span-2">
+                <div class="text-emerald-600/70">GPS-Koordinaten</div>
+                <div class="font-bold text-emerald-800">${formatGpsLine(geofenceMatch)}</div>
+              </div>
+              ${geofenceMatch.auditHash ? `<div class="bg-white/70 rounded-lg px-2.5 py-2 col-span-2">
+                <div class="text-emerald-600/70">Audit-Hash (SHA-256)</div>
+                <div class="font-mono text-[10px] text-emerald-800 break-all">${geofenceMatch.auditHash}</div>
+              </div>` : ''}
             </div>
           </div>`;
       }
@@ -1457,8 +1708,12 @@ ${geoBox}
           <textarea id="objectionPreview" rows="12"
             class="w-full text-xs leading-relaxed rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 mb-3 focus:ring-2 focus:ring-brand-500 outline-none font-sans"></textarea>
           <div class="grid grid-cols-1 gap-2">
+            <button type="button" id="sendObjectionBtn" onclick="sendObjectionFromApp()"
+              class="min-h-[48px] rounded-xl bg-brand-600 text-white text-sm font-bold px-3 py-2 active:scale-[.98] transition flex items-center justify-center gap-2">
+              ${icon('send', 'h-4 w-4')} 🚀 Einwand direkt aus ProofMed senden
+            </button>
             <button type="button" onclick="openObjectionMail()"
-              class="min-h-[44px] rounded-xl bg-brand-600 text-white text-sm font-bold px-3 py-2 active:scale-[.98] transition flex items-center justify-center gap-2">
+              class="min-h-[44px] rounded-xl bg-white border border-slate-200 text-slate-800 text-sm font-bold px-3 py-2 active:scale-[.98] transition flex items-center justify-center gap-2">
               ${icon('mail', 'h-4 w-4')} In Mail-App öffnen
             </button>
             <button type="button" onclick="copyObjectionText()"

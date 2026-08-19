@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import BackgroundTasks, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -15,7 +15,9 @@ from fastapi.staticfiles import StaticFiles
 from app.api.v1 import api_router_v1
 from app.config import configure_logging, settings
 from app.database import init_db
+from app.schemas.objection import SendObjectionRequest, SendObjectionResponse
 from app.seed import seed_goa_catalog
+from app.services.mailer import dispatch_objection_email
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -61,6 +63,20 @@ app.include_router(api_router_v1, prefix=settings.API_V1_PREFIX)
 async def health() -> dict[str, str]:
     """Einfacher Health-Check fuer Monitoring und Deployments."""
     return {"status": "ok", "project": settings.PROJECT_NAME}
+
+
+@app.post(
+    "/api/v1/send-objection",
+    response_model=SendObjectionResponse,
+    tags=["objections"],
+    summary="Formellen Einwand per E-Mail versenden",
+)
+async def send_objection(
+    payload: SendObjectionRequest,
+    background_tasks: BackgroundTasks,
+) -> SendObjectionResponse:
+    """Sendet den Einwand per SMTP oder gibt einen erfolgreichen Mock zurueck."""
+    return dispatch_objection_email(payload, background_tasks)
 
 
 @app.get("/docs", include_in_schema=False)
