@@ -1,0 +1,39 @@
+{
+  "invoice_number": "R-2026-TEST-002",
+  "practice_name": "Dr. med. Schmidt - Allgemeinmedizin",
+  "treatment_date": "2026-08-21",
+  "claimed_items": [
+    {
+      "code": "3",
+      "factor": 2.3,
+      "amount_eur": 20.11,
+      "description": "Eingehende Beratung"
+    },
+    {
+      "code": "8",
+      "factor": 2.3,
+      "amount_eur": 33.52,
+      "description": "Ganzkörperstatus"
+    },
+    {
+      "code": "250",
+      "factor": 1.8,
+      "amount_eur": 4.20,
+      "description": "Blutentnahme"
+    },
+    {
+      "code": "410",
+      "factor": 1.8,
+      "amount_eur": 29.38,
+      "description": "Ultraschall eines Organs"
+    },
+    {
+      "code": "B",
+      "factor": 1.0,
+      "amount_eur": 10.49,
+      "description": "Zuschlag Spätbereich"
+    }
+  ],
+  "presence_duration_minutes": 45,
+  "has_written_justification": false
+}

@@ -1,0 +1,45 @@
+{
+  "invoice_number": "R-2026-TEST-001",
+  "practice_name": "Dr. med. Schmidt - Allgemeinmedizin",
+  "treatment_date": "2026-08-21",
+  "claimed_items": [
+    {
+      "code": "1",
+      "factor": 2.8,
+      "amount_eur": 13.04,
+      "description": "Beratungsgespräch (überhöhter Faktor)"
+    },
+    {
+      "code": "3",
+      "factor": 2.3,
+      "amount_eur": 20.11,
+      "description": "Eingehende Beratung (Ausschluss zu GOÄ 1)"
+    },
+    {
+      "code": "5",
+      "factor": 2.3,
+      "amount_eur": 10.72,
+      "description": "Symptombezogene Untersuchung"
+    },
+    {
+      "code": "8",
+      "factor": 2.3,
+      "amount_eur": 33.52,
+      "description": "Ganzkörperstatus (Ausschluss zu GOÄ 5, benötigt 20 Min)"
+    },
+    {
+      "code": "250",
+      "factor": 2.0,
+      "amount_eur": 8.40,
+      "description": "Blutentnahme (überhöhter Faktor für technische Leistung)"
+    },
+    {
+      "code": "A",
+      "factor": 1.5,
+      "amount_eur": 6.12,
+      "description": "Zuschlag außerhalb Sprechstunde (FEHLER: darf nicht multipliziert werden)"
+    }
+  ],
+  "presence_duration_minutes": 15,
+  "has_written_justification": false
+}
