@@ -443,6 +443,422 @@
   </div>
 
   <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50:'#eef6ff',100:'#d9ebff',500:'#2563eb',600:'#1d4ed8',700:'#1e40af' },
+          },
+          fontFamily: { sans: ['Inter','ui-sans-serif','system-ui','sans-serif'] },
+        },
+      },
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    #saveDiaryBtn, #leavePracticeBtn { scroll-margin-bottom: 6.5rem; }
+    .fade-in { animation: fadeIn .35s ease-out; }
+    @keyframes fadeIn { from { opacity:0; transform: translateY(8px);} to {opacity:1; transform:none;} }
+    .safe-bottom { padding-bottom: calc(0.85rem + env(safe-area-inset-bottom)); }
+    .safe-top { padding-top: calc(0.5rem + env(safe-area-inset-top)); }
+    input[type="time"], input[type="date"] { -webkit-appearance: none; }
+    .tap { -webkit-tap-highlight-color: transparent; }
+    ::-webkit-scrollbar { display: none; }
+    .live-pulse { animation: livePulse 1.6s ease-in-out infinite; }
+    @keyframes livePulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: .55; transform: scale(1.15); }
+    }
+    #toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(5.75rem + env(safe-area-inset-bottom));
+      transform: translateX(-50%);
+    z-index: 80;
+      max-width: calc(100% - 2rem);
+    }
+    .diary-filter-btn.active { background: #fff; color: #1e40af; box-shadow: 0 1px 2px rgb(15 23 42 / 0.08); }
+    details.diary-archive > summary { list-style: none; cursor: pointer; }
+    details.diary-archive > summary::-webkit-details-marker { display: none; }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: none; }
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-800 tap pb-40">
+
+  <!-- Header -->
+  <header class="safe-top sticky top-0 z-30 bg-gradient-to-r from-brand-700 via-brand-600 to-brand-500 text-white shadow-lg">
+    <div class="max-w-md mx-auto px-4 pb-4 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2.5">
+        <img src="/branding/medical-ai-app-icon.svg" alt="ProofMed Logo" class="h-10 w-10 rounded-xl shadow-md shrink-0" />
+        <div class="min-w-0">
+          <h1 class="text-lg font-extrabold tracking-tight leading-tight">ProofMed</h1>
+          <p class="text-brand-100 text-[11px] leading-tight truncate">GOÄ-Prüfung &amp; Geofencing-Nachweis</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-1.5 text-[11px] bg-white/10 px-2.5 py-1 rounded-full shrink-0">
+        <span id="apiDot" class="h-2 w-2 rounded-full bg-amber-300 animate-pulse"></span>
+        <span id="apiStatus">Verbinde …</span>
+      </div>
+    </div>
+    <div class="max-w-md mx-auto px-4 pb-3">
+      <button type="button" id="privacyBadgeBtn"
+        class="w-full text-left rounded-xl bg-emerald-500/20 border border-white/20 px-3 py-2 active:scale-[.99] transition">
+        <div class="text-[12px] font-extrabold text-white leading-snug">🔒 100% DSGVO-konform &amp; Lokal</div>
+        <p class="text-[10px] text-emerald-50/95 leading-snug mt-0.5">
+          Sämtliche Standort-Logs, GPS-Koordinaten und Rechnungsdaten verbleiben ausschließlich im lokalen Speicher deines Smartphones (<span class="font-mono">localStorage</span>).
+        </p>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main input flow -->
+  <main id="inputFlow" class="max-w-md mx-auto px-4 py-4 space-y-4">
+
+    <!-- Section A: Rechnung erfassen (Foto-Upload zuerst, immer ohne Scrollen sichtbar) -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="h-6 w-6 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center text-xs font-bold shrink-0">1</span>
+        <h2 class="text-base font-bold">Rechnung erfassen</h2>
+      </div>
+
+      <!-- Tabs -->
+      <div class="grid grid-cols-2 gap-2 mb-4 bg-slate-100 rounded-xl p-1">
+        <button id="tabBtnFoto" type="button" class="tabBtn min-h-[40px] rounded-lg text-sm font-bold transition flex items-center justify-center gap-1.5">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 shrink-0"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3.5"/></svg>
+          Foto
+        </button>
+        <button id="tabBtnManual" type="button" class="tabBtn min-h-[40px] rounded-lg text-[13px] font-bold transition flex items-center justify-center gap-1.5 px-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 shrink-0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+          GOÄ manuell
+        </button>
+      </div>
+
+      <!-- Foto tab -->
+      <div id="tabFoto" class="space-y-3">
+        <label for="cameraInput" class="flex flex-col items-center justify-center gap-1 border-2 border-dashed border-brand-300 rounded-2xl py-5 px-4 bg-brand-50/50 active:scale-[.98] transition cursor-pointer">
+          <span class="relative flex items-center justify-center h-14 w-14 mb-0.5">
+            <span class="absolute inset-0 rounded-full bg-brand-400/25 blur-lg"></span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="relative h-8 w-8 text-brand-600"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3.5"/></svg>
+          </span>
+          <span class="font-bold text-brand-700 text-sm text-center leading-snug">Rechnung fotografieren<br/>／ Datei hochladen</span>
+          <span class="text-xs text-slate-500 text-center">Kamera öffnet sich automatisch &middot; JPEG, PNG oder PDF</span>
+          <input id="cameraInput" type="file" accept="image/*,application/pdf" capture="environment" class="hidden" />
+        </label>
+
+        <div id="photoPreviewWrap" class="hidden fade-in rounded-2xl border border-slate-200 p-3 flex items-center gap-3">
+          <img id="photoPreview" class="h-16 w-16 rounded-xl object-cover bg-slate-100 shrink-0" alt="Vorschau der fotografierten Rechnung" />
+          <div class="min-w-0 flex-1">
+            <div id="photoFileName" class="text-sm font-semibold truncate">rechnung.jpg</div>
+            <div id="photoStatus" class="text-xs text-emerald-600 font-medium flex items-center gap-1">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5 shrink-0"><path d="M20 13c0 5-3.5 8.5-8 9.5-4.5-1-8-4.5-8-9.5V6.3a1 1 0 0 1 .6-.9L12 2l7.4 3.4a1 1 0 0 1 .6.9Z"/><path d="m9 12 2 2 4-4"/></svg>
+              <span>Bereit zur Prüfung</span>
+            </div>
+          </div>
+          <button id="removePhotoBtn" type="button" class="h-9 w-9 shrink-0 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center active:scale-90 transition">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+        </div>
+        <p class="text-[11px] text-slate-400 leading-snug px-1">
+          Hinweis: Die Texterkennung läuft serverseitig. Der Geofencing-Beweis kommt aus Ihrem Praxis-Tagebuch
+          (Live-Check-in oder nachgetragen) &middot; GOÄ-Ziffern können Sie auch unter „GOÄ manuell” prüfen.
+        </p>
+      </div>
+
+      <!-- Manual GOÄ audit tab (decoupled from presence logging) -->
+      <div id="tabManual" class="hidden space-y-3">
+        <div>
+          <h3 class="text-sm font-bold text-slate-800">GOÄ-Ziffern manuell prüfen</h3>
+          <p class="text-xs text-slate-500 mt-0.5">Alle gängigen Ziffern und Zuschläge auswählen. Persönlich: Begründung ab 2,3× (max. 3,5×). Technisch: Begründung ab 1,8× (max. 2,5×). Zuschläge sind fest 1,0×. Die Zeitprüfung nutzt die Summe der Mindestdauern gegen Ihren Tagebuch-Eintrag.</p>
+        </div>
+        <div>
+          <label for="auditDiarySelect" class="block text-xs font-medium text-slate-500 mb-1">Prüfen gegen Tagebuch-Eintrag</label>
+          <select id="auditDiarySelect"
+            class="w-full text-sm rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 focus:ring-2 focus:ring-brand-500 outline-none">
+            <option value="">Kein Eintrag vorhanden</option>
+          </select>
+        </div>
+        <div>
+          <label for="goaQuickAdd" class="block text-xs font-medium text-slate-500 mb-1">Ziffer schnell auswählen</label>
+          <select id="goaQuickAdd"
+            class="w-full text-sm rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 focus:ring-2 focus:ring-brand-500 outline-none">
+            <option value="">Katalog durchsuchen …</option>
+          </select>
+        </div>
+        <div id="zifferList" class="space-y-2.5">
+          <div class="text-slate-400 text-sm py-6 text-center">Lade Katalog …</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section B: Anwesenheit (entkoppelt von GOÄ-Ziffern) -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="h-6 w-6 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center text-xs font-bold shrink-0">2</span>
+        <h2 class="text-base font-bold">Praxisbesuch erfassen</h2>
+      </div>
+
+      <p class="text-xs text-slate-500 mb-3">Aufenthalt unabhängig von der Rechnungsprüfung im Tagebuch speichern.</p>
+
+      <button id="liveCheckInBtn" type="button"
+        class="w-full min-h-[52px] rounded-2xl bg-brand-600 hover:bg-brand-700 active:scale-[.98] transition text-white font-extrabold text-sm shadow-md shadow-brand-600/20 flex items-center justify-center gap-2">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 shrink-0"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+        Ich bin jetzt in der Praxis
+      </button>
+
+      <div id="liveVisitBar" class="hidden fade-in mt-3 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-3 space-y-3">
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5 text-sm font-extrabold text-emerald-800">
+              <span class="h-2.5 w-2.5 rounded-full bg-emerald-500 live-pulse shrink-0"></span>
+              <span id="liveVisitStatus">Aktiv in der Praxis</span>
+            </div>
+            <div id="liveVisitPraxis" class="text-xs text-emerald-700/80 mt-0.5 truncate"></div>
+            <div id="liveGpsNote" class="hidden text-xs text-emerald-700 mt-1 font-medium"></div>
+            <div id="liveRoomNote" class="hidden text-xs text-emerald-700 mt-1 font-medium"></div>
+          </div>
+          <div class="text-right shrink-0">
+            <div id="liveElapsed" class="text-xl font-extrabold text-emerald-700 tabular-nums leading-none">0 min</div>
+            <div class="text-[10px] text-emerald-600/80 mt-0.5">Live-Timer</div>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 gap-2">
+          <button id="enterRoomBtn" type="button"
+            class="min-h-[44px] rounded-xl bg-white border border-emerald-200 text-emerald-800 text-sm font-bold px-3 py-2 active:scale-95 transition flex items-center justify-center gap-2">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 shrink-0"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></svg>
+            Behandlungszimmer betreten
+          </button>
+          <button id="leavePracticeBtn" type="button"
+            class="min-h-[44px] rounded-xl bg-slate-800 text-white text-sm font-bold px-3 py-2 active:scale-95 transition flex items-center justify-center gap-2">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 shrink-0"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+            Praxis verlassen
+          </button>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 my-4">
+        <div class="h-px flex-1 bg-slate-200"></div>
+        <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">oder nachtragen</span>
+        <div class="h-px flex-1 bg-slate-200"></div>
+      </div>
+
+      <h3 class="text-sm font-bold text-slate-800 mb-2">Praxisbesuch nachtragen</h3>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+        <div>
+          <label for="treatmentDate" class="block text-xs font-medium text-slate-500 mb-1">Behandlungsdatum</label>
+          <input id="treatmentDate" type="date"
+            class="w-full text-lg font-semibold tabular-nums rounded-xl border border-slate-200 px-3 py-2.5 focus:ring-2 focus:ring-brand-500 outline-none" />
+        </div>
+        <div>
+          <label for="praxisName" class="block text-xs font-medium text-slate-500 mb-1">Praxisname</label>
+          <input id="praxisName" type="text" value="Praxis Dr. Mustermann"
+            class="w-full text-sm rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
+            placeholder="Name der Praxis" />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-2 mb-3">
+        <button type="button" class="quickTimeBtn min-h-[44px] rounded-xl bg-brand-50 text-brand-700 text-xs font-bold px-2 py-2 border border-brand-100 active:scale-95 transition" data-mins="15">Vor 15 Min<br/>da gewesen</button>
+        <button type="button" class="quickTimeBtn min-h-[44px] rounded-xl bg-brand-50 text-brand-700 text-xs font-bold px-2 py-2 border border-brand-100 active:scale-95 transition" data-mins="30">Vor 30 Min<br/>da gewesen</button>
+        <button type="button" class="quickTimeBtn min-h-[44px] rounded-xl bg-brand-50 text-brand-700 text-xs font-bold px-2 py-2 border border-brand-100 active:scale-95 transition" data-mins="45">Vor 45 Min<br/>da gewesen</button>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label for="arrival" class="block text-xs font-medium text-slate-500 mb-1">Ankunftszeit</label>
+          <input id="arrival" type="time"
+            class="w-full text-lg font-semibold tabular-nums rounded-xl border border-slate-200 px-3 py-2.5 focus:ring-2 focus:ring-brand-500 outline-none" />
+        </div>
+        <div>
+          <label for="departure" class="block text-xs font-medium text-slate-500 mb-1">Abfahrtszeit</label>
+          <input id="departure" type="time"
+            class="w-full text-lg font-semibold tabular-nums rounded-xl border border-slate-200 px-3 py-2.5 focus:ring-2 focus:ring-brand-500 outline-none" />
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3 mt-3 border border-slate-100">
+        <span class="text-sm text-slate-500">Aufenthaltsdauer</span>
+        <span id="durationTicker" class="text-2xl font-extrabold text-brand-600 tabular-nums">– min</span>
+      </div>
+
+      <button id="saveDiaryBtn" type="button"
+        class="w-full min-h-[52px] mt-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-[.98] transition text-white font-extrabold text-sm shadow-md shadow-emerald-600/20 disabled:opacity-40 disabled:shadow-none flex items-center justify-center gap-2">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 shrink-0"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+        In Tagebuch speichern
+      </button>
+    </section>
+
+    <!-- Section C: Geofencing-Tagebuch -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+      <div class="flex items-center justify-between gap-2 mb-1">
+        <div class="flex items-center gap-2">
+          <span class="h-7 w-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+          </span>
+          <h2 class="text-base font-bold">Praxis-Tagebuch (Geofencing Logs)</h2>
+        </div>
+      </div>
+      <p class="text-xs text-slate-500 mb-3">
+        Praxisbesuche werden per Live-Check-in oder Nachtrag auf diesem Gerät gespeichert
+        (localStorage) &middot; unabhängig von GOÄ-Ziffern &middot; dient als Aufenthaltsnachweis für später eingehende Rechnungen.
+        Archivierte Einträge bleiben für den Rechnungsabgleich verfügbar.
+      </p>
+      <div class="grid grid-cols-3 gap-1 bg-slate-100 rounded-xl p-1 mb-3">
+        <button type="button" id="diaryFilterActive" class="diary-filter-btn active min-h-[40px] rounded-lg text-[11px] font-bold text-slate-500 px-1 leading-tight">
+          📍 Aktive Besuche
+        </button>
+        <button type="button" id="diaryFilterArchive" class="diary-filter-btn min-h-[40px] rounded-lg text-[11px] font-bold text-slate-500 px-1 leading-tight">
+          📦 Archiv
+        </button>
+        <button type="button" id="diaryFilterAll" class="diary-filter-btn min-h-[40px] rounded-lg text-[11px] font-bold text-slate-500 px-1 leading-tight">
+          📋 Alle
+        </button>
+      </div>
+      <div id="geofenceLogList" class="space-y-2"></div>
+    </section>
+
+    <!-- Section D: Rechnungen & Zahlungsziele -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="h-7 w-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+        </span>
+        <h2 class="text-base font-bold">Rechnungen &amp; Zahlungsziele</h2>
+      </div>
+      <p class="text-xs text-slate-500 mb-3">
+        Geprüfte Rechnungen mit 14-tägigem Zahlungsziel. Bei aktivem Einwand wird die Zahlung automatisch gestoppt.
+      </p>
+      <div id="invoiceLedgerList" class="space-y-2"></div>
+    </section>
+
+    <!-- Section E: Jahres-Dossier -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="h-7 w-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+        </span>
+        <h2 class="text-base font-bold">Jahres-Dossier (Steuer &amp; Beihilfe)</h2>
+      </div>
+      <p class="text-xs text-slate-500 mb-3">
+        Aufenthaltsnachweise und geprüfte Rechnungen für Außergewöhnliche Belastungen, Steuererklärung und Beihilfe.
+      </p>
+      <label for="dossierYear" class="block text-xs font-medium text-slate-500 mb-1">Jahr</label>
+      <select id="dossierYear"
+        class="w-full text-sm rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 mb-3 focus:ring-2 focus:ring-brand-500 outline-none"></select>
+      <div class="grid grid-cols-1 gap-2">
+        <button type="button" id="dossierPdfBtn"
+          class="min-h-[48px] rounded-xl bg-slate-800 text-white text-sm font-bold px-3 py-2 active:scale-[.98] transition flex items-center justify-center gap-2">
+          📊 Jahres-Dossier (PDF) herunterladen
+        </button>
+        <button type="button" id="dossierCsvBtn"
+          class="min-h-[44px] rounded-xl bg-white border border-slate-200 text-slate-800 text-sm font-bold px-3 py-2 active:scale-[.98] transition flex items-center justify-center gap-2">
+          CSV für Excel / WISO Steuer
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="max-w-md mx-auto px-4 pb-24 pt-1">
+    <div class="rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-[11px] text-slate-500 leading-relaxed">
+      <p>
+        ⚖️ <strong class="text-slate-700">Rechtlicher Hinweis:</strong> ProofMed ist ein technischer Prüf- und Vorlagen-Assistent.
+        Die App führt keine individuelle Rechtsberatung im Sinne des Rechtsdienstleistungsgesetzes (RDG) durch.
+        Generierte Einwand-Schreiben stellen automatisierte Musterschreiben dar.
+      </p>
+      <div class="flex flex-wrap gap-x-3 gap-y-1 mt-2">
+        <button type="button" id="openLegalModalBtn" class="text-brand-700 font-semibold underline underline-offset-2">
+          Rechtlicher Status &amp; RDG-Hinweis
+        </button>
+        <button type="button" id="openPrivacyModalBtn" class="text-brand-700 font-semibold underline underline-offset-2">
+          Datenschutz &amp; Transparenz
+        </button>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Sticky bottom CTA -->
+  <div class="fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-slate-200 safe-bottom pt-3 px-4">
+    <div class="max-w-md mx-auto">
+      <button id="verifyBtn" disabled
+        class="w-full min-h-[56px] bg-brand-600 hover:bg-brand-700 active:scale-[.98] transition text-white font-extrabold text-base rounded-2xl shadow-lg shadow-brand-600/20 disabled:opacity-40 disabled:shadow-none flex items-center justify-center gap-2">
+        <span class="flex items-center justify-center gap-2">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 shrink-0"><path d="M20 13c0 5-3.5 8.5-8 9.5-4.5-1-8-4.5-8-9.5V6.3a1 1 0 0 1 .6-.9L12 2l7.4 3.4a1 1 0 0 1 .6.9Z"/><path d="m9 12 2 2 4-4"/></svg>
+          Abrechnung jetzt prüfen
+        </span>
+        <span id="selCount" class="hidden bg-white/20 text-white text-xs font-bold rounded-full h-5 min-w-[20px] px-1.5 items-center justify-center">0</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="hidden toast-in">
+    <div class="bg-emerald-600 text-white text-sm font-bold rounded-2xl shadow-lg px-4 py-3 text-center leading-snug">
+      <span id="toastMsg">Praxisbesuch erfolgreich im Tagebuch gespeichert!</span>
+    </div>
+  </div>
+
+  <!-- Result overlay (mobile result dashboard) -->
+  <div id="resultOverlay" class="hidden fixed inset-0 z-50 bg-slate-50 overflow-y-auto">
+    <div class="safe-top sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-slate-100 px-4 py-3 flex items-center gap-3">
+      <button id="closeResultBtn" class="h-9 w-9 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center active:scale-90 transition shrink-0">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+      </button>
+      <h2 class="text-base font-bold">Prüfergebnis</h2>
+    </div>
+    <div id="resultContent" class="max-w-md mx-auto px-4 py-4 pb-10 space-y-4"></div>
+  </div>
+
+  <!-- RDG legal modal -->
+  <div id="legalModal" class="hidden fixed inset-0 z-[70] bg-slate-900/50 px-4 py-8 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="legalModalTitle">
+    <div class="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-5 mt-10 fade-in">
+      <div class="flex items-start justify-between gap-3 mb-3">
+        <h2 id="legalModalTitle" class="text-base font-extrabold text-slate-800">Rechtlicher Status &amp; RDG-Hinweis</h2>
+        <button type="button" id="closeLegalModalBtn" class="h-9 w-9 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center shrink-0" aria-label="Schließen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <p class="text-sm text-slate-600 leading-relaxed mb-3">
+        ⚖️ <strong>Rechtlicher Hinweis:</strong> ProofMed ist ein technischer Prüf- und Vorlagen-Assistent.
+        Die App führt keine individuelle Rechtsberatung im Sinne des Rechtsdienstleistungsgesetzes (RDG) durch.
+        Generierte Einwand-Schreiben stellen automatisierte Musterschreiben dar.
+      </p>
+      <ul class="text-sm text-slate-600 leading-relaxed space-y-2 list-disc pl-5">
+        <li>Die Prüfung erfolgt regelbasiert (GOÄ-Katalog, Zeiten, Ausschlüsse) — ohne anwaltliche Würdigung Ihres Einzelfalls.</li>
+        <li>Musterschreiben müssen Sie selbst prüfen, anpassen und in eigener Verantwortung versenden.</li>
+        <li>Bei Unsicherheiten wenden Sie sich an eine Rechtsanwältin / einen Rechtsanwalt oder Ihre Beihilfestelle.</li>
+      </ul>
+      <p class="text-[11px] text-slate-400 mt-3">Rechtsgrundlage der Abgrenzung: § 2 Rechtsdienstleistungsgesetz (RDG).</p>
+    </div>
+  </div>
+
+  <!-- DSGVO privacy modal -->
+  <div id="privacyModal" class="hidden fixed inset-0 z-[70] bg-slate-900/50 px-4 py-8 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="privacyModalTitle">
+    <div class="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-5 mt-10 fade-in">
+      <div class="flex items-start justify-between gap-3 mb-3">
+        <h2 id="privacyModalTitle" class="text-base font-extrabold text-slate-800">Datenschutz &amp; Transparenz</h2>
+        <button type="button" id="closePrivacyModalBtn" class="h-9 w-9 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center shrink-0" aria-label="Schließen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <p class="text-sm font-bold text-emerald-800 mb-2">🔒 100% DSGVO-konform &amp; Lokal — Zero-Cloud Data Sovereignty</p>
+      <p class="text-sm text-slate-600 leading-relaxed mb-3">
+        Sämtliche Standort-Logs, GPS-Koordinaten und Rechnungsdaten verbleiben ausschließlich im lokalen Speicher deines Smartphones (<span class="font-mono text-xs">localStorage</span>).
+      </p>
+      <ul class="text-sm text-slate-600 leading-relaxed space-y-2 list-disc pl-5">
+        <li><strong>Lokale Rechnungsverarbeitung:</strong> Fotos/PDFs werden auf dem Gerät als Datei bzw. Base64 vorgehalten; ein Upload erfolgt nur, wenn Sie selbst „Abrechnung prüfen“ oder „Einwand senden“ auslösen.</li>
+        <li><strong>Kein Tracking von Praxisbesuchen:</strong> Live-Check-in, GPS und Tagebuch bleiben auf dem Gerät. Es gibt kein serverseitiges Bewegungsprofil.</li>
+        <li><strong>Volle Kontrolle:</strong> Einträge können jederzeit archiviert oder gelöscht werden. Ohne Ihre Aktion verlassen Gesundheits- und Standortdaten das Gerät nicht.</li>
+      </ul>
+      <p class="text-[11px] text-slate-400 mt-3">Ausgerichtet auf Privatpatienten und Beihilfeberechtigte mit besonders schutzbedürftigen Gesundheitsdaten.</p>
+    </div>
+  </div>
+
+  <script>
     const API = '/api/v1/claims';
     let catalog = [];
     let activeTab = 'foto';
