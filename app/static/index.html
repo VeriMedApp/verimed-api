@@ -102,11 +102,10 @@
                                 <stop offset="100%" stop-color="#9d00e0" />
                             </linearGradient>
                             <pattern id="grid-pattern" width="32" height="32" patternUnits="userSpaceOnUse">
-                                <path d="M 32 0 L 0 0 0 32" fill="none" stroke="rgba(255, 255, 255, 0.12)" stroke-width="1" />
+                                <path d="M 32 0 L 0 0 0 32" fill="none" stroke="rgba(255, 255, 255, 0.18)" stroke-width="1" />
                             </pattern>
                             <filter id="emblem-shadow" x="-20%" y="-20%" width="140%" height="140%">
-                                <feDropShadow dx="0" dy="12" stdDeviation="10" flood-color="#000000" flood-opacity="0.35" />
-                                <feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="#000000" flood-opacity="0.2" />
+                                <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#000000" flood-opacity="0.3" />
                             </filter>
                             <filter id="glow-cyan" x="-50%" y="-50%" width="200%" height="200%">
                                 <feGaussianBlur stdDeviation="3" result="blur" />
@@ -118,27 +117,27 @@
                         </defs>
                         <rect width="512" height="512" rx="112" fill="url(#proofmed-bg)" />
                         <rect width="512" height="512" rx="112" fill="url(#grid-pattern)" />
-                        <g stroke="rgba(255, 255, 255, 0.15)" stroke-width="1.5" fill="none">
-                            <circle cx="256" cy="256" r="80" />
-                            <circle cx="256" cy="256" r="140" stroke-dasharray="4 4" />
-                            <circle cx="256" cy="256" r="200" />
-                            <circle cx="256" cy="256" r="240" stroke-dasharray="6 6" opacity="0.6" />
+                        <g stroke="rgba(255, 255, 255, 0.18)" stroke-width="2" fill="none">
+                            <circle cx="256" cy="256" r="85" />
+                            <circle cx="256" cy="256" r="145" stroke-dasharray="5 5" />
+                            <circle cx="256" cy="256" r="205" />
                         </g>
-                        <circle cx="395" cy="82" r="5" fill="#50e3c2" filter="url(#glow-cyan)" />
-                        <circle cx="98" cy="418" r="5" fill="#50e3c2" filter="url(#glow-cyan)" />
-                        <circle cx="440" cy="385" r="4" fill="#ff4081" filter="url(#glow-cyan)" />
+                        <circle cx="400" cy="85" r="6" fill="#50e3c2" filter="url(#glow-cyan)" />
+                        <circle cx="100" cy="420" r="6" fill="#50e3c2" filter="url(#glow-cyan)" />
+                        <circle cx="445" cy="390" r="5" fill="#ff4081" filter="url(#glow-cyan)" />
                         <g filter="url(#emblem-shadow)" fill="#ffffff">
-                            <rect x="142" y="90" width="28" height="16" rx="8" />
-                            <rect x="242" y="90" width="28" height="16" rx="8" />
-                            <path d="M 156 106 L 156 220 A 90 90 0 0 0 246 310 L 252 310 A 60 60 0 0 0 312 250 L 312 210 A 20 20 0 0 1 332 190 L 332 230 A 80 80 0 0 1 252 310 A 110 110 0 0 1 132 200 L 132 106 Z" opacity="0.95" />
-                            <path d="M 175 180 L 290 260 C 296 264, 292 274, 284 274 L 230 274 L 190 400 C 186 412, 170 410, 168 398 L 160 286 L 175 180 Z" />
-                            <circle cx="236" cy="300" r="10" />
-                            <circle cx="248" cy="328" r="8" />
-                            <circle cx="258" cy="352" r="6" />
-                            <circle cx="266" cy="370" r="4" />
-                            <circle cx="360" cy="310" r="44" />
-                            <circle cx="360" cy="310" r="28" fill="url(#proofmed-bg)" />
-                            <circle cx="360" cy="310" r="16" />
+                            <ellipse cx="160" cy="95" rx="16" ry="10" />
+                            <ellipse cx="260" cy="95" rx="16" ry="10" />
+                            <path d="M 160 105 Q 160 130, 145 155 Q 130 180, 130 210 L 130 250 Q 130 290, 165 315 Q 200 340, 240 340" stroke="white" stroke-width="12" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                            <path d="M 260 105 Q 260 130, 275 155 Q 290 175, 305 195 L 340 230" stroke="white" stroke-width="12" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                            <path d="M 340 230 L 385 190 L 375 220 L 395 225 L 375 250 L 365 235 L 350 245 Z" fill="white" />
+                            <circle cx="250" cy="350" r="8" />
+                            <circle cx="265" cy="375" r="7" />
+                            <circle cx="280" cy="395" r="6" />
+                            <circle cx="295" cy="410" r="5" />
+                            <circle cx="380" cy="340" r="45" stroke="white" stroke-width="8" fill="none" />
+                            <circle cx="380" cy="340" r="30" fill="url(#proofmed-bg)" />
+                            <circle cx="380" cy="340" r="18" fill="white" />
                         </g>
                     </svg>
                 </div>
