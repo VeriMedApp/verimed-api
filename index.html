@@ -12,8 +12,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="ProofMed">
     <link rel="manifest" href="/manifest.json">
-    <link rel="icon" type="image/png" href="/branding/logo.png">
-    <link rel="apple-touch-icon" href="/branding/logo.png">
+    <link rel="icon" type="image/png" href="/branding/icon-192.png">
+    <link rel="apple-touch-icon" href="/branding/icon-192.png">
     
     <!-- Google Fonts: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -92,55 +92,7 @@
         <div class="max-w-4xl mx-auto flex items-center justify-between">
             <!-- Brand Logo -->
             <div class="flex items-center space-x-3 cursor-pointer" onclick="switchTab('scan')">
-                <div class="w-10 h-10 rounded-xl overflow-hidden shadow-lg shadow-blue-500/20 ring-1 ring-white/20 bg-gradient-to-tr from-cyan-500 via-blue-600 to-purple-600">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-full h-full">
-                        <defs>
-                            <linearGradient id="proofmed-bg" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" stop-color="#00c6ff" />
-                                <stop offset="45%" stop-color="#0052d4" />
-                                <stop offset="80%" stop-color="#6e0dd0" />
-                                <stop offset="100%" stop-color="#9d00e0" />
-                            </linearGradient>
-                            <pattern id="grid-pattern" width="32" height="32" patternUnits="userSpaceOnUse">
-                                <path d="M 32 0 L 0 0 0 32" fill="none" stroke="rgba(255, 255, 255, 0.18)" stroke-width="1" />
-                            </pattern>
-                            <filter id="emblem-shadow" x="-20%" y="-20%" width="140%" height="140%">
-                                <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#000000" flood-opacity="0.3" />
-                            </filter>
-                            <filter id="glow-cyan" x="-50%" y="-50%" width="200%" height="200%">
-                                <feGaussianBlur stdDeviation="3" result="blur" />
-                                <feMerge>
-                                    <feMergeNode in="blur" />
-                                    <feMergeNode in="SourceGraphic" />
-                                </feMerge>
-                            </filter>
-                        </defs>
-                        <rect width="512" height="512" rx="112" fill="url(#proofmed-bg)" />
-                        <rect width="512" height="512" rx="112" fill="url(#grid-pattern)" />
-                        <g stroke="rgba(255, 255, 255, 0.18)" stroke-width="2" fill="none">
-                            <circle cx="256" cy="256" r="85" />
-                            <circle cx="256" cy="256" r="145" stroke-dasharray="5 5" />
-                            <circle cx="256" cy="256" r="205" />
-                        </g>
-                        <circle cx="400" cy="85" r="6" fill="#50e3c2" filter="url(#glow-cyan)" />
-                        <circle cx="100" cy="420" r="6" fill="#50e3c2" filter="url(#glow-cyan)" />
-                        <circle cx="445" cy="390" r="5" fill="#ff4081" filter="url(#glow-cyan)" />
-                        <g filter="url(#emblem-shadow)" fill="#ffffff">
-                            <ellipse cx="160" cy="95" rx="16" ry="10" />
-                            <ellipse cx="260" cy="95" rx="16" ry="10" />
-                            <path d="M 160 105 Q 160 130, 145 155 Q 130 180, 130 210 L 130 250 Q 130 290, 165 315 Q 200 340, 240 340" stroke="white" stroke-width="12" fill="none" stroke-linecap="round" stroke-linejoin="round" />
-                            <path d="M 260 105 Q 260 130, 275 155 Q 290 175, 305 195 L 340 230" stroke="white" stroke-width="12" fill="none" stroke-linecap="round" stroke-linejoin="round" />
-                            <path d="M 340 230 L 385 190 L 375 220 L 395 225 L 375 250 L 365 235 L 350 245 Z" fill="white" />
-                            <circle cx="250" cy="350" r="8" />
-                            <circle cx="265" cy="375" r="7" />
-                            <circle cx="280" cy="395" r="6" />
-                            <circle cx="295" cy="410" r="5" />
-                            <circle cx="380" cy="340" r="45" stroke="white" stroke-width="8" fill="none" />
-                            <circle cx="380" cy="340" r="30" fill="url(#proofmed-bg)" />
-                            <circle cx="380" cy="340" r="18" fill="white" />
-                        </g>
-                    </svg>
-                </div>
+                <img src="branding/logo.png" alt="ProofMed Logo" class="w-10 h-10 rounded-xl object-cover shadow-lg shadow-blue-500/20 ring-1 ring-white/20">
                 <div>
                     <span class="text-xl font-black tracking-tight text-white">Proof<span class="text-teal-400">Med</span></span>
                     <span class="text-[10px] block text-slate-400 font-semibold tracking-wider uppercase">Pre-Payment Audit</span>
