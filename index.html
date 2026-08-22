@@ -5,6 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>ProofMed – Digitale Rechnungsprüfung & Geofence Audit</title>
     
+    <!-- PWA Meta Tags -->
+    <meta name="description" content="Professionelle Liquidationsprüfung mit Geofencing und GOÄ-Katalog für Privatärzte">
+    <meta name="theme-color" content="#3b82f6">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ProofMed">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" href="/branding/logo.png">
+    <link rel="apple-touch-icon" href="/branding/logo.png">
+    
     <!-- Google Fonts: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1244,6 +1254,45 @@
         document.addEventListener('DOMContentLoaded', () => {
             renderGOAChips();
             renderDiaryLogs();
+        });
+
+        // Register Service Worker for PWA
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then((registration) => {
+                        console.log('✅ ProofMed Service Worker registered:', registration.scope);
+                        
+                        // Check for updates
+                        registration.addEventListener('updatefound', () => {
+                            const newWorker = registration.installing;
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    console.log('🔄 New version available! Reload to update.');
+                                }
+                            });
+                        });
+                    })
+                    .catch((error) => {
+                        console.error('❌ Service Worker registration failed:', error);
+                    });
+            });
+        }
+
+        // PWA Install Prompt
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            console.log('💾 PWA installation available');
+            
+            // Optional: Show custom install button (future enhancement)
+            // showInstallButton();
+        });
+
+        window.addEventListener('appinstalled', () => {
+            console.log('✅ ProofMed PWA installed successfully!');
+            deferredPrompt = null;
         });
     </script>
 </body>
