@@ -82,19 +82,38 @@
         <div class="max-w-4xl mx-auto flex items-center justify-between">
             <!-- Brand Logo -->
             <div class="flex items-center space-x-3 cursor-pointer" onclick="switchTab('scan')">
-                <div id="brand-logo-container" class="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center shadow-xl shadow-indigo-600/30 ring-2 ring-white/20 overflow-hidden relative">
-                    <img id="brand-logo-img" src="branding/logo.png" alt="ProofMed Logo" class="w-full h-full object-cover" onerror="this.style.display='none'; document.getElementById('brand-logo-fallback').style.display='flex';">
-                    <svg id="brand-logo-fallback" class="w-6 h-6 text-white" style="display:none;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
-                        <!-- Stethoscope merged with Location Pin -->
-                        <path d="M5 19a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v10z"/>
-                        <path d="M12 2v5"/>
-                        <circle cx="12" cy="9" r="1.5" fill="currentColor"/>
-                        <path d="M5 9c0-2.8 2.2-5 5-5h4c2.8 0 5 2.2 5 5"/>
-                        <circle cx="12" cy="15" r="2" fill="currentColor"/>
-                        <path d="M12 17v2"/>
-                        <!-- Geofence Radar Pulses -->
-                        <circle cx="12" cy="15" r="4" opacity="0.3" stroke-width="1"/>
-                        <circle cx="12" cy="15" r="6" opacity="0.15" stroke-width="0.5"/>
+                <div id="brand-logo-container" class="relative">
+                    <img id="brand-logo-img" src="branding/logo.png" alt="ProofMed Logo" class="h-10 w-10 rounded-xl object-cover shadow-lg shadow-blue-500/20 ring-1 ring-white/20" onerror="this.style.display='none'; document.getElementById('brand-logo-fallback').style.display='flex';">
+                    <svg id="brand-logo-fallback" class="h-10 w-10 rounded-xl shadow-lg shadow-blue-500/20 ring-1 ring-white/20" style="display:none;" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Gradient Grid Background -->
+                        <defs>
+                            <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#a855f7;stop-opacity:1" />
+                                <stop offset="50%" style="stop-color:#6366f1;stop-opacity:1" />
+                                <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
+                            </linearGradient>
+                            <pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse">
+                                <path d="M 10 0 L 0 0 0 10" fill="none" stroke="white" stroke-width="0.3" opacity="0.15"/>
+                            </pattern>
+                        </defs>
+                        <rect width="100" height="100" rx="12" fill="url(#logoGrad)"/>
+                        <rect width="100" height="100" rx="12" fill="url(#grid)"/>
+                        
+                        <!-- Stethoscope with Cursor Arrow Design -->
+                        <!-- Left Ear Tube -->
+                        <path d="M 25 22 Q 20 22 20 27 Q 20 32 25 35" stroke="white" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+                        <!-- Right Ear Tube curving into Cursor Arrow -->
+                        <path d="M 45 22 Q 50 22 50 27 Q 50 35 58 38" stroke="white" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+                        <!-- Cursor Arrow (top-right pointing) -->
+                        <path d="M 58 38 L 72 30 L 68 42 L 74 44 L 66 52 L 62 46 L 54 48 Z" fill="white"/>
+                        <!-- Dotted connection line to chestpiece -->
+                        <line x1="60" y1="46" x2="68" y2="62" stroke="white" stroke-width="1.5" stroke-dasharray="2,3" stroke-linecap="round"/>
+                        <!-- Chestpiece (circular) -->
+                        <circle cx="70" cy="68" r="9" fill="none" stroke="white" stroke-width="3"/>
+                        <circle cx="70" cy="68" r="5" fill="white" opacity="0.7"/>
+                        <!-- Subtle radar pulse rings -->
+                        <circle cx="70" cy="68" r="13" stroke="white" stroke-width="0.8" opacity="0.2" fill="none"/>
+                        <circle cx="70" cy="68" r="17" stroke="white" stroke-width="0.6" opacity="0.1" fill="none"/>
                     </svg>
                 </div>
                 <div>
