@@ -9,7 +9,7 @@ from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.v1 import api_router_v1
@@ -86,8 +86,40 @@ async def redirect_to_dashboard() -> RedirectResponse:
     return RedirectResponse(url="/", status_code=302)
 
 
+# PWA-Routen: Explizit bereitstellen für korrekte MIME-Types und Install-Prompt
+_STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+
+@app.get("/manifest.json", include_in_schema=False)
+async def serve_manifest() -> FileResponse:
+    """Stellt das PWA-Manifest mit korrektem Content-Type bereit."""
+    manifest_path = _STATIC_DIR / "manifest.json"
+    return FileResponse(
+        path=manifest_path,
+        media_type="application/json",
+        headers={
+            "Cache-Control": "public, max-age=600",
+            "Access-Control-Allow-Origin": "*",
+        },
+    )
+
+
+@app.get("/service-worker.js", include_in_schema=False)
+async def serve_service_worker() -> FileResponse:
+    """Stellt den Service Worker mit korrektem Content-Type bereit."""
+    sw_path = _STATIC_DIR / "service-worker.js"
+    return FileResponse(
+        path=sw_path,
+        media_type="application/javascript",
+        headers={
+            "Cache-Control": "public, max-age=0",
+            "Service-Worker-Allowed": "/",
+            "Access-Control-Allow-Origin": "*",
+        },
+    )
+
+
 # Statisches Dashboard (Interaktiver Simulator).
 # WICHTIG: Der Mount erfolgt NACH den API-Routern, damit "/" das Dashboard
 # liefert, die API-Routen (/api/v1/...) und /health aber Vorrang behalten.
-_STATIC_DIR = Path(__file__).resolve().parent / "static"
 app.mount("/", StaticFiles(directory=str(_STATIC_DIR), html=True), name="static")
