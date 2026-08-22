@@ -18,6 +18,8 @@ services:
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
     envVars:
+      - key: PORT
+        value: "10000"
       - key: DATABASE_URL
         value: sqlite+aiosqlite:///./verimed.db
       - key: DEBUG
