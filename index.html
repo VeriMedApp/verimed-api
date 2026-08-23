@@ -245,7 +245,7 @@
                         <div>
                             <label class="block text-slate-400 text-[11px] mb-1.5 font-medium">Empfänger schnell wählen</label>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                <button id="preset-pill-custom" onclick="selectPreset('custom', 'info@mvz-philippstor.de')" class="preset-pill p-3 rounded-xl text-left transition-all border-2 bg-gradient-to-r from-teal-500/20 to-blue-600/20 border-teal-400/60 text-teal-200 shadow-lg shadow-teal-500/10">
+                                <button id="preset-pill-custom" onclick="selectPreset('custom', document.getElementById('objection-email').value)" class="preset-pill p-3 rounded-xl text-left transition-all border-2 bg-gradient-to-r from-teal-500/20 to-blue-600/20 border-teal-400/60 text-teal-200 shadow-lg shadow-teal-500/10">
                                     <div class="font-bold text-xs">Praxis-E-Mail</div>
                                     <div class="text-[10px] opacity-80 mt-0.5">aus Rechnung</div>
                                 </button>
@@ -874,17 +874,23 @@
             
             setTimeout(() => {
                 const extractedCodes = ["1", "3", "8"];
-                const invoiceDate = "2026-08-18";
-                const practiceName = "MVZ Philippstor";
                 const factors = { "1": 2.3, "3": 3.5, "8": 2.3 };
+
+                // Get latest non-archived diary entry
+                const logs = JSON.parse(localStorage.getItem('proofmed_diary') || '[]');
+                const latestLog = logs.filter(l => !l.archived).sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+                
+                const invoiceDate = latestLog?.date || new Date().toISOString().split('T')[0];
+                const practiceName = latestLog?.practice || "Dr. med. Sandra Jakobs";
 
                 runAuditEngine(invoiceDate, practiceName, extractedCodes, factors, file.name);
             }, 800);
         }
 
         function runManualAudit() {
-            const date = document.getElementById('manual-date').value || "2026-08-18";
-            const practice = document.getElementById('manual-practice').value || "Unbekannte Praxis";
+            const defaultDate = new Date().toISOString().split('T')[0];
+            const date = document.getElementById('manual-date').value || defaultDate;
+            const practice = document.getElementById('manual-practice').value || "Dr. med. Sandra Jakobs";
             const selectedCodes = Object.keys(selectedGOACodes);
 
             if (selectedCodes.length === 0) {
@@ -939,6 +945,17 @@
             }
 
             displayAuditResults(sourceName, date, practice, codes, totalClaimed, issues, matchedLog);
+        }
+
+        function derivePracticeEmail(practiceName) {
+            if (practiceName.includes("Jakobs")) {
+                return "praxis@dr-jakobs-aldenhoven.de";
+            } else if (practiceName.includes("Philippstor")) {
+                return "info@mvz-philippstor.de";
+            } else {
+                const slug = practiceName.toLowerCase().replace(/[^a-z0-9]/g, '');
+                return `info@${slug}.de`;
+            }
         }
 
         function displayAuditResults(sourceName, date, practice, codes, totalClaimed, issues, matchedLog) {
@@ -1007,10 +1024,18 @@
                 
                 const objText = document.getElementById('objection-text');
                 const objEmail = document.getElementById('objection-email');
+                const practiceEmail = derivePracticeEmail(practice);
+                
                 if (objText) objText.value = objectionBody;
                 if (objEmail) {
-                    objEmail.value = "info@mvz-philippstor.de";
-                    selectPreset('custom', 'info@mvz-philippstor.de');
+                    objEmail.value = practiceEmail;
+                    selectPreset('custom', practiceEmail);
+                }
+                
+                // Update custom preset pill subtext
+                const customPillSubtext = document.querySelector('#preset-pill-custom .text-\\[10px\\]');
+                if (customPillSubtext) {
+                    customPillSubtext.textContent = practiceEmail;
                 }
 
                 lastAuditData = { practice, date, codes, totalClaimed, issues, matchedLog, objectionBody };
