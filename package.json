@@ -1,0 +1,29 @@
+{
+  "name": "proofmed",
+  "version": "1.0.0",
+  "description": "ProofMed – Privataudit & Geofence-Tagebuch",
+  "main": "index.html",
+  "scripts": {
+    "cap:sync": "npx cap copy && npx cap sync",
+    "cap:build": "npx cap copy && npx cap sync",
+    "cap:open:android": "npx cap open android",
+    "cap:open:ios": "npx cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/cli": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/ios": "^6.0.0",
+    "@capacitor-community/sqlite": "^6.0.0"
+  },
+  "keywords": [
+    "proofmed",
+    "capacitor",
+    "sqlite",
+    "goa",
+    "e2ee",
+    "privacy"
+  ],
+  "author": "ProofMed",
+  "license": "UNLICENSED"
+}
