@@ -530,9 +530,12 @@
                 activeBtn.classList.remove('text-slate-400');
             }
         }
+        window.switchTab = switchTab;
 
-        function openPrivacyModal() { document.getElementById('privacy-modal').classList.remove('hidden'); }
-        function closePrivacyModal() { document.getElementById('privacy-modal').classList.add('hidden'); }
+        function openPrivacyModal() { document.getElementById('privacy-modal')?.classList.remove('hidden'); }
+        function closePrivacyModal() { document.getElementById('privacy-modal')?.classList.add('hidden'); }
+        window.openPrivacyModal = openPrivacyModal;
+        window.closePrivacyModal = closePrivacyModal;
 
         /* INTERACTIVE GOÄ SELECTOR ENGINE */
         function renderGOAChips() {
@@ -786,16 +789,15 @@
             async init() {
                 if (this.initPromise) return this.initPromise;
                 this.initPromise = (async () => {
-                    // Detect Capacitor Native Container
-                    const isCapacitorEnv = typeof window.Capacitor !== 'undefined' && (
-                        (typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) ||
-                        (window.Capacitor.platform && window.Capacitor.platform !== 'web') ||
-                        (typeof window.Capacitor.isPluginAvailable === 'function' && window.Capacitor.isPluginAvailable('CapacitorSQLite')) ||
-                        !!window.Capacitor.Plugins
-                    );
+                    try {
+                        // Detect Capacitor Native Container safely without throwing
+                        const hasCapacitor = typeof window !== 'undefined' && typeof window.Capacitor !== 'undefined';
+                        const isNative = hasCapacitor && (
+                            (typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) ||
+                            (window.Capacitor.platform && window.Capacitor.platform !== 'web')
+                        );
 
-                    if (isCapacitorEnv) {
-                        try {
+                        if (isNative) {
                             const sqlitePlugin = window.Capacitor?.Plugins?.CapacitorSQLite || window.CapacitorSQLite;
                             if (sqlitePlugin) {
                                 try {
@@ -811,9 +813,11 @@
                                             readonly: false
                                         });
                                     }
-                                    await this.sqliteConn.open();
+                                    if (this.sqliteConn && typeof this.sqliteConn.open === 'function') {
+                                        await this.sqliteConn.open();
+                                    }
                                 } catch (connErr) {
-                                    console.warn("Direct connection failed, using plugin fallback:", connErr);
+                                    console.warn("Direct connection fallback to plugin interface:", connErr);
                                     this.sqliteConn = sqlitePlugin;
                                 }
 
@@ -840,31 +844,28 @@
                                 this.isCapacitor = true;
                                 console.log("✅ ProofMed SQLite Plugin (proofmed.db) initialized");
                             }
-                        } catch (err) {
-                            console.warn("⚠️ Capacitor SQLite initialization failed, falling back to Web Storage:", err);
-                            this.isCapacitor = false;
                         }
+                    } catch (err) {
+                        console.warn("Capacitor SQLite init note, falling back to localStorage:", err);
+                        this.isCapacitor = false;
                     }
 
                     // Web Browser Fallback: Persist storage if supported
                     if (!this.isCapacitor) {
-                        if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.persist) {
-                            try {
-                                const isPersisted = await navigator.storage.persist();
-                                console.log(`💾 Web Storage Persist Status: ${isPersisted ? 'Persisted' : 'Not Persisted'}`);
-                            } catch (e) {
-                                console.debug("Persistent storage request note:", e);
+                        try {
+                            if (typeof navigator !== 'undefined' && navigator.storage && typeof navigator.storage.persist === 'function') {
+                                navigator.storage.persist().catch(() => {});
                             }
-                        }
+                        } catch (e) {}
                     }
                 })();
                 return this.initPromise;
             },
 
             async getItem(key) {
-                await this.init();
-                if (this.isCapacitor && this.sqliteConn) {
-                    try {
+                try {
+                    await this.init();
+                    if (this.isCapacitor && this.sqliteConn) {
                         const sql = "SELECT value FROM proofmed_storage WHERE key = ?;";
                         if (this.sqliteConn.query) {
                             const res = await this.sqliteConn.query({ statement: sql, values: [key] });
@@ -895,17 +896,21 @@
                                 });
                             });
                         }
-                    } catch (err) {
-                        console.warn("SQLite getItem failed, fallback to localStorage:", err);
                     }
+                } catch (err) {
+                    console.warn("Storage getItem fallback to localStorage:", err);
                 }
-                return localStorage.getItem(key);
+                try {
+                    return localStorage.getItem(key);
+                } catch (e) {
+                    return null;
+                }
             },
 
             async setItem(key, value) {
-                await this.init();
-                if (this.isCapacitor && this.sqliteConn) {
-                    try {
+                try {
+                    await this.init();
+                    if (this.isCapacitor && this.sqliteConn) {
                         const sql = "INSERT OR REPLACE INTO proofmed_storage (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP);";
                         if (this.sqliteConn.run) {
                             await this.sqliteConn.run({ statement: sql, values: [key, value] });
@@ -924,17 +929,21 @@
                                 });
                             });
                         }
-                    } catch (err) {
-                        console.warn("SQLite setItem failed, fallback to localStorage:", err);
                     }
+                } catch (err) {
+                    console.warn("Storage setItem fallback to localStorage:", err);
                 }
-                localStorage.setItem(key, value);
+                try {
+                    localStorage.setItem(key, value);
+                } catch (e) {
+                    console.error("localStorage setItem error:", e);
+                }
             },
 
             async removeItem(key) {
-                await this.init();
-                if (this.isCapacitor && this.sqliteConn) {
-                    try {
+                try {
+                    await this.init();
+                    if (this.isCapacitor && this.sqliteConn) {
                         const sql = "DELETE FROM proofmed_storage WHERE key = ?;";
                         if (this.sqliteConn.run) {
                             await this.sqliteConn.run({ statement: sql, values: [key] });
@@ -953,27 +962,44 @@
                                 });
                             });
                         }
-                    } catch (err) {
-                        console.warn("SQLite removeItem failed, fallback to localStorage:", err);
                     }
+                } catch (err) {
+                    console.warn("Storage removeItem fallback to localStorage:", err);
                 }
-                localStorage.removeItem(key);
+                try {
+                    localStorage.removeItem(key);
+                } catch (e) {
+                    console.error("localStorage removeItem error:", e);
+                }
             },
 
             async getDiaryLogs() {
-                const raw = await this.getItem('proofmed_diary');
                 try {
+                    const raw = await this.getItem('proofmed_diary');
                     return raw ? JSON.parse(raw) : [];
                 } catch (e) {
-                    console.error("Fehler beim Parsen der Tagebuch-Logs:", e);
-                    return [];
+                    console.warn("Fehler beim Laden/Parsen der Tagebuch-Logs, Fallback auf localStorage:", e);
+                    try {
+                        const raw = localStorage.getItem('proofmed_diary');
+                        return raw ? JSON.parse(raw) : [];
+                    } catch (err) {
+                        return [];
+                    }
                 }
             },
 
             async setDiaryLogs(logs) {
-                await this.setItem('proofmed_diary', JSON.stringify(logs));
+                try {
+                    await this.setItem('proofmed_diary', JSON.stringify(logs));
+                } catch (e) {
+                    console.error("Fehler beim Speichern der Tagebuch-Logs:", e);
+                    try {
+                        localStorage.setItem('proofmed_diary', JSON.stringify(logs));
+                    } catch (err) {}
+                }
             }
         };
+        window.ProofMedStorage = ProofMedStorage;
 
         /* ZERO-KNOWLEDGE E2EE CLOUD-BACKUP ENGINE (Web Crypto API) */
         function arrayBufferToBase64(buffer) {
@@ -1870,9 +1896,21 @@
 
         // Initialize App on DOM Ready
         document.addEventListener('DOMContentLoaded', async () => {
-            await ProofMedStorage.init();
-            renderGOAChips();
-            await renderDiaryLogs();
+            try {
+                await ProofMedStorage.init();
+            } catch (err) {
+                console.warn("ProofMedStorage init warning:", err);
+            }
+            try {
+                renderGOAChips();
+            } catch (err) {
+                console.error("renderGOAChips error:", err);
+            }
+            try {
+                await renderDiaryLogs();
+            } catch (err) {
+                console.error("renderDiaryLogs error:", err);
+            }
         });
 
         // Register Service Worker for PWA
