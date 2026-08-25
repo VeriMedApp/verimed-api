@@ -5,16 +5,26 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import BackgroundTasks, FastAPI
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1 import api_router_v1
 from app.config import configure_logging, settings
-from app.database import init_db
+from app.database import get_db, init_db
+from app.models.backup import EncryptedBackup
+from app.schemas.backup import (
+    RestoreBackupRequest,
+    RestoreBackupResponse,
+    SaveBackupRequest,
+    SaveBackupResponse,
+)
 from app.schemas.objection import SendObjectionRequest, SendObjectionResponse
 from app.seed import seed_goa_catalog
 from app.services.mailer import dispatch_objection_email
@@ -63,6 +73,103 @@ app.include_router(api_router_v1, prefix=settings.API_V1_PREFIX)
 async def health() -> dict[str, str]:
     """Einfacher Health-Check fuer Monitoring und Deployments."""
     return {"status": "ok", "project": settings.PROJECT_NAME}
+
+
+@app.post(
+    "/api/v1/backup/save",
+    response_model=SaveBackupResponse,
+    tags=["backup"],
+    summary="Zero-Knowledge E2EE Backup auf Hetzner speichern",
+)
+async def save_backup(
+    payload: SaveBackupRequest,
+    db: AsyncSession = Depends(get_db),
+) -> SaveBackupResponse:
+    """Speichert oder ueberschreibt das verschluesselte E2EE-Tagebuch-Backup.
+    
+    Das Backend empfaengt und speichert ausschliesslich unlesbaren Chiffretext.
+    Weder die PIN noch Klartext-Tagebucheintraege oder kryptographische Schluessel
+    werden an das Backend uebertragen oder dort gespeichert.
+    """
+    stmt = select(EncryptedBackup).where(
+        EncryptedBackup.user_id_hash == payload.user_id_hash
+    )
+    result = await db.execute(stmt)
+    backup_entry = result.scalar_one_or_none()
+    now_utc = datetime.now(timezone.utc)
+
+    if backup_entry is not None:
+        backup_entry.ciphertext_base64 = payload.ciphertext_base64
+        backup_entry.iv_base64 = payload.iv_base64
+        backup_entry.salt_base64 = payload.salt_base64
+        backup_entry.updated_at = now_utc
+    else:
+        backup_entry = EncryptedBackup(
+            user_id_hash=payload.user_id_hash,
+            ciphertext_base64=payload.ciphertext_base64,
+            iv_base64=payload.iv_base64,
+            salt_base64=payload.salt_base64,
+            updated_at=now_utc,
+        )
+        db.add(backup_entry)
+
+    await db.commit()
+    await db.refresh(backup_entry)
+
+    logger.info(
+        "Zero-Knowledge Backup erfolgreich gespeichert (user_id_hash: %s...).",
+        payload.user_id_hash[:10],
+    )
+
+    return SaveBackupResponse(
+        success=True,
+        message="Backup erfolgreich auf Hetzner gespeichert!",
+        timestamp=backup_entry.updated_at.isoformat(),
+    )
+
+
+@app.post(
+    "/api/v1/backup/restore",
+    response_model=RestoreBackupResponse,
+    tags=["backup"],
+    summary="Zero-Knowledge E2EE Backup von Hetzner abrufen",
+)
+async def restore_backup(
+    payload: RestoreBackupRequest,
+    db: AsyncSession = Depends(get_db),
+) -> RestoreBackupResponse:
+    """Ruft das verschluesselte E2EE-Tagebuch-Backup anhand des user_id_hash ab.
+    
+    Gibt HTTP 404 zurueck, falls kein Backup fuer den Hash existiert.
+    """
+    stmt = select(EncryptedBackup).where(
+        EncryptedBackup.user_id_hash == payload.user_id_hash
+    )
+    result = await db.execute(stmt)
+    backup_entry = result.scalar_one_or_none()
+
+    if backup_entry is None:
+        logger.warning(
+            "Backup-Wiederherstellung fehlgeschlagen: Kein Eintrag fuer user_id_hash %s...",
+            payload.user_id_hash[:10],
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Kein Backup für diese PIN auf Hetzner gefunden.",
+        )
+
+    logger.info(
+        "Zero-Knowledge Backup erfolgreich abgerufen (user_id_hash: %s...).",
+        payload.user_id_hash[:10],
+    )
+
+    return RestoreBackupResponse(
+        success=True,
+        ciphertext_base64=backup_entry.ciphertext_base64,
+        iv_base64=backup_entry.iv_base64,
+        salt_base64=backup_entry.salt_base64,
+        timestamp=backup_entry.updated_at.isoformat(),
+    )
 
 
 @app.post(

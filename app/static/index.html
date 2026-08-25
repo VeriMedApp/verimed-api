@@ -307,14 +307,24 @@
         <!-- TAB 2: TAGEBUCH -->
         <section id="tab-diary" class="hidden space-y-4">
             <div class="glass-card p-5 rounded-2xl space-y-4">
-                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-                    <h3 class="text-sm font-bold text-white flex items-center space-x-2">
-                        <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                        <span>Live Check-in & Tagebuch</span>
-                    </h3>
-                    <span id="active-timer-badge" class="hidden bg-emerald-500/20 text-emerald-400 text-[10px] px-2.5 py-1 rounded-full font-mono font-bold animate-pulse">
-                        ● Timer aktiv
-                    </span>
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-3 gap-3">
+                    <div class="flex items-center space-x-2">
+                        <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                            <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                            <span>Live Check-in & Tagebuch</span>
+                        </h3>
+                        <span id="active-timer-badge" class="hidden bg-emerald-500/20 text-emerald-400 text-[10px] px-2.5 py-1 rounded-full font-mono font-bold animate-pulse">
+                            ● Timer aktiv
+                        </span>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button onclick="saveCloudBackup()" class="px-3 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 hover:text-white border border-blue-500/30 text-xs font-semibold transition-all flex items-center space-x-1.5 shadow-sm active:scale-95">
+                            <span>☁️ Backup auf Hetzner speichern</span>
+                        </button>
+                        <button onclick="restoreCloudBackup()" class="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-semibold transition-all flex items-center space-x-1.5 shadow-sm active:scale-95">
+                            <span>🔄 Backup wiederherstellen</span>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- 1-Click Live Check-In Controller -->
@@ -765,6 +775,210 @@
             };
 
             saveDiaryEntry(entry);
+        }
+
+        /* ZERO-KNOWLEDGE E2EE CLOUD-BACKUP ENGINE (Web Crypto API) */
+        function arrayBufferToBase64(buffer) {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            for (let i = 0; i < bytes.byteLength; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return window.btoa(binary);
+        }
+
+        function base64ToArrayBuffer(base64) {
+            const binaryString = window.atob(base64);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        async function deriveEncryptionKey(pin, saltUint8Array) {
+            const enc = new TextEncoder();
+            const pinBuffer = enc.encode(pin);
+            const baseKey = await window.crypto.subtle.importKey(
+                "raw",
+                pinBuffer,
+                { name: "PBKDF2" },
+                false,
+                ["deriveKey"]
+            );
+            return await window.crypto.subtle.deriveKey(
+                {
+                    name: "PBKDF2",
+                    salt: saltUint8Array,
+                    iterations: 100000,
+                    hash: "SHA-256"
+                },
+                baseKey,
+                { name: "AES-GCM", length: 256 },
+                false,
+                ["encrypt", "decrypt"]
+            );
+        }
+
+        async function computeUserIdHash(pin) {
+            const ID_SALT = "_proofmed_hetzner_backup_salt_v1";
+            const enc = new TextEncoder();
+            const data = enc.encode(pin + ID_SALT);
+            const hashBuffer = await window.crypto.subtle.digest("SHA-256", data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+        }
+
+        async function encryptDiaryData(pin, plaintextJson) {
+            // 16-byte random salt for PBKDF2
+            const salt = window.crypto.getRandomValues(new Uint8Array(16));
+            const key = await deriveEncryptionKey(pin, salt);
+
+            // 12-byte random IV for AES-GCM
+            const iv = window.crypto.getRandomValues(new Uint8Array(12));
+
+            const enc = new TextEncoder();
+            const dataBuffer = enc.encode(plaintextJson);
+
+            const encryptedBuffer = await window.crypto.subtle.encrypt(
+                {
+                    name: "AES-GCM",
+                    iv: iv
+                },
+                key,
+                dataBuffer
+            );
+
+            const userIdHash = await computeUserIdHash(pin);
+
+            return {
+                user_id_hash: userIdHash,
+                ciphertext_base64: arrayBufferToBase64(encryptedBuffer),
+                iv_base64: arrayBufferToBase64(iv),
+                salt_base64: arrayBufferToBase64(salt)
+            };
+        }
+
+        async function decryptDiaryData(pin, ciphertextBase64, ivBase64, saltBase64) {
+            const saltBuffer = base64ToArrayBuffer(saltBase64);
+            const ivBuffer = base64ToArrayBuffer(ivBase64);
+            const ciphertextBuffer = base64ToArrayBuffer(ciphertextBase64);
+
+            const key = await deriveEncryptionKey(pin, new Uint8Array(saltBuffer));
+
+            const decryptedBuffer = await window.crypto.subtle.decrypt(
+                {
+                    name: "AES-GCM",
+                    iv: new Uint8Array(ivBuffer)
+                },
+                key,
+                ciphertextBuffer
+            );
+
+            const dec = new TextDecoder();
+            return dec.decode(decryptedBuffer);
+        }
+
+        async function saveCloudBackup() {
+            const pinRaw = prompt("Bitte 6-stellige Sicherheits-PIN für das verschlüsselte Hetzner-Backup eingeben (z.B. 123456):");
+            if (pinRaw === null) return;
+            const pin = pinRaw.trim();
+            if (!/^\d{6}$/.test(pin)) {
+                showToast("Die PIN muss aus genau 6 Ziffern bestehen!", true);
+                return;
+            }
+
+            const diaryData = localStorage.getItem('proofmed_diary') || '[]';
+
+            try {
+                showToast("Verschlüssele Tagebuch mit AES-GCM-256...");
+                const payload = await encryptDiaryData(pin, diaryData);
+
+                const response = await fetch('/api/v1/backup/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    showToast("🟢 Tagebuch verschlüsselt auf Hetzner gesichert!");
+                } else {
+                    showToast(`Fehler beim Backup: ${result.detail || result.message || 'Serverfehler'}`, true);
+                }
+            } catch (err) {
+                console.error("Backup save failed:", err);
+                showToast(`Verschlüsselungsfehler: ${err.message}`, true);
+            }
+        }
+
+        async function restoreCloudBackup() {
+            const pinRaw = prompt("Bitte deine 6-stellige Sicherheits-PIN zur Wiederherstellung eingeben:");
+            if (pinRaw === null) return;
+            const pin = pinRaw.trim();
+            if (!/^\d{6}$/.test(pin)) {
+                showToast("Die PIN muss aus genau 6 Ziffern bestehen!", true);
+                return;
+            }
+
+            try {
+                showToast("Lade verschlüsseltes Backup von Hetzner...");
+                const userIdHash = await computeUserIdHash(pin);
+
+                const response = await fetch('/api/v1/backup/restore', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id_hash: userIdHash })
+                });
+
+                if (response.status === 404) {
+                    showToast("Kein Backup für diese PIN auf Hetzner gefunden.", true);
+                    return;
+                }
+
+                if (!response.ok) {
+                    const errJson = await response.json().catch(() => ({}));
+                    showToast(`Fehler beim Abrufen: ${errJson.detail || 'Serverfehler'}`, true);
+                    return;
+                }
+
+                const data = await response.json();
+                if (!data.ciphertext_base64 || !data.iv_base64 || !data.salt_base64) {
+                    showToast("Ungültiges Backup-Format empfangen.", true);
+                    return;
+                }
+
+                showToast("Entschlüssele Daten...");
+                let decryptedJson;
+                try {
+                    decryptedJson = await decryptDiaryData(pin, data.ciphertext_base64, data.iv_base64, data.salt_base64);
+                } catch (decryptErr) {
+                    console.error("Decryption failed:", decryptErr);
+                    showToast("Entschlüsselung fehlgeschlagen: Falsche PIN!", true);
+                    return;
+                }
+
+                let parsed;
+                try {
+                    parsed = JSON.parse(decryptedJson);
+                } catch (parseErr) {
+                    throw new Error("Wiederhergestellte Daten sind kein gültiges JSON.");
+                }
+
+                if (!Array.isArray(parsed)) {
+                    throw new Error("Wiederhergestellte Daten sind kein gültiges Tagebuch-Array.");
+                }
+
+                localStorage.setItem('proofmed_diary', JSON.stringify(parsed));
+                renderDiaryLogs();
+
+                const count = parsed.length;
+                showToast(`🟢 ${count} Tagebuch-Einträge erfolgreich wiederhergestellt!`);
+            } catch (err) {
+                console.error("Restore failed:", err);
+                showToast(`Wiederherstellungsfehler: ${err.message}`, true);
+            }
         }
 
         async function generateSHA256(text) {

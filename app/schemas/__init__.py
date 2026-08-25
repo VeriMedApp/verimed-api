@@ -1,5 +1,11 @@
 """Pydantic v2 Schemas fuer ProofMed."""
 
+from app.schemas.backup import (
+    RestoreBackupRequest,
+    RestoreBackupResponse,
+    SaveBackupRequest,
+    SaveBackupResponse,
+)
 from app.schemas.claim import (
     Anomaly,
     AnomalyType,
@@ -20,4 +26,8 @@ __all__ = [
     "Anomaly",
     "AnomalyType",
     "ZifferReport",
+    "SaveBackupRequest",
+    "SaveBackupResponse",
+    "RestoreBackupRequest",
+    "RestoreBackupResponse",
 ]
