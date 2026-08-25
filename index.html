@@ -420,7 +420,7 @@
                 <button onclick="closePrivacyModal()" class="text-slate-400 hover:text-white font-bold text-sm">✕</button>
             </div>
             <div class="space-y-3 text-xs text-slate-300 leading-relaxed">
-                <p><strong>Zero-Cloud Privacy Architecture:</strong> Sämtliche hochsensiblen Praxis-Besuchs-Logs, GPS-Koordinaten und Rechnungsdaten verbleiben ausschließlich lokal im verschlüsselten Speicher deines Smartphones (<code class="text-emerald-400 font-mono">localStorage</code>).</p>
+                <p><strong>Zero-Cloud Privacy Architecture:</strong> Sämtliche hochsensiblen Praxis-Besuchs-Logs, GPS-Koordinaten und Rechnungsdaten verbleiben ausschließlich lokal im verschlüsselten Speicher deines Smartphones (<code class="text-emerald-400 font-mono">Native SQLite (proofmed.db) / localStorage</code>).</p>
                 <p>Es erfolgt keine Speicherung deiner Bewegungsprofile oder medizinischen Daten auf externen Cloud-Servern.</p>
             </div>
             <button onclick="closePrivacyModal()" class="w-full bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs py-2.5 rounded-xl border border-slate-700">Verstanden</button>
@@ -777,6 +777,204 @@
             saveDiaryEntry(entry);
         }
 
+        /* NATIVE CAPACITOR & WEB STORAGE ADAPTER (proofmed.db / localStorage) */
+        const ProofMedStorage = {
+            isCapacitor: false,
+            sqliteConn: null,
+            initPromise: null,
+
+            async init() {
+                if (this.initPromise) return this.initPromise;
+                this.initPromise = (async () => {
+                    // Detect Capacitor Native Container
+                    const isCapacitorEnv = typeof window.Capacitor !== 'undefined' && (
+                        (typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) ||
+                        (window.Capacitor.platform && window.Capacitor.platform !== 'web') ||
+                        (typeof window.Capacitor.isPluginAvailable === 'function' && window.Capacitor.isPluginAvailable('CapacitorSQLite')) ||
+                        !!window.Capacitor.Plugins
+                    );
+
+                    if (isCapacitorEnv) {
+                        try {
+                            const sqlitePlugin = window.Capacitor?.Plugins?.CapacitorSQLite || window.CapacitorSQLite;
+                            if (sqlitePlugin) {
+                                try {
+                                    const isConn = await sqlitePlugin.isConnection({ database: "proofmed.db", readonly: false }).catch(() => ({ result: false }));
+                                    if (isConn && isConn.result) {
+                                        this.sqliteConn = await sqlitePlugin.retrieveConnection({ database: "proofmed.db", readonly: false });
+                                    } else {
+                                        this.sqliteConn = await sqlitePlugin.createConnection({
+                                            database: "proofmed.db",
+                                            version: 1,
+                                            encrypted: false,
+                                            mode: "no-encryption",
+                                            readonly: false
+                                        });
+                                    }
+                                    await this.sqliteConn.open();
+                                } catch (connErr) {
+                                    console.warn("Direct connection failed, using plugin fallback:", connErr);
+                                    this.sqliteConn = sqlitePlugin;
+                                }
+
+                                const schema = `CREATE TABLE IF NOT EXISTS proofmed_storage (
+                                    key TEXT PRIMARY KEY NOT NULL,
+                                    value TEXT NOT NULL,
+                                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                                );`;
+
+                                if (this.sqliteConn?.execute) {
+                                    await this.sqliteConn.execute({ statements: schema });
+                                } else if (sqlitePlugin.execute) {
+                                    await sqlitePlugin.execute({ database: "proofmed.db", statements: schema });
+                                }
+                                this.isCapacitor = true;
+                                console.log("✅ ProofMed Native SQLite (proofmed.db) initialized in Capacitor");
+                            } else if (window.sqlitePlugin) {
+                                this.sqliteConn = window.sqlitePlugin.openDatabase({ name: 'proofmed.db', location: 'default' });
+                                await new Promise((resolve, reject) => {
+                                    this.sqliteConn.transaction(tx => {
+                                        tx.executeSql('CREATE TABLE IF NOT EXISTS proofmed_storage (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);', [], () => resolve(), (_, err) => reject(err));
+                                    });
+                                });
+                                this.isCapacitor = true;
+                                console.log("✅ ProofMed SQLite Plugin (proofmed.db) initialized");
+                            }
+                        } catch (err) {
+                            console.warn("⚠️ Capacitor SQLite initialization failed, falling back to Web Storage:", err);
+                            this.isCapacitor = false;
+                        }
+                    }
+
+                    // Web Browser Fallback: Persist storage if supported
+                    if (!this.isCapacitor) {
+                        if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.persist) {
+                            try {
+                                const isPersisted = await navigator.storage.persist();
+                                console.log(`💾 Web Storage Persist Status: ${isPersisted ? 'Persisted' : 'Not Persisted'}`);
+                            } catch (e) {
+                                console.debug("Persistent storage request note:", e);
+                            }
+                        }
+                    }
+                })();
+                return this.initPromise;
+            },
+
+            async getItem(key) {
+                await this.init();
+                if (this.isCapacitor && this.sqliteConn) {
+                    try {
+                        const sql = "SELECT value FROM proofmed_storage WHERE key = ?;";
+                        if (this.sqliteConn.query) {
+                            const res = await this.sqliteConn.query({ statement: sql, values: [key] });
+                            if (res && res.values && res.values.length > 0) {
+                                return res.values[0].value;
+                            }
+                            return null;
+                        } else if (window.Capacitor?.Plugins?.CapacitorSQLite?.query) {
+                            const res = await window.Capacitor.Plugins.CapacitorSQLite.query({
+                                database: "proofmed.db",
+                                statement: sql,
+                                values: [key]
+                            });
+                            if (res && res.values && res.values.length > 0) {
+                                return res.values[0].value;
+                            }
+                            return null;
+                        } else if (this.sqliteConn.transaction) {
+                            return new Promise((resolve) => {
+                                this.sqliteConn.transaction(tx => {
+                                    tx.executeSql(sql, [key], (tx, rs) => {
+                                        if (rs.rows.length > 0) {
+                                            resolve(rs.rows.item(0).value);
+                                        } else {
+                                            resolve(null);
+                                        }
+                                    }, () => resolve(null));
+                                });
+                            });
+                        }
+                    } catch (err) {
+                        console.warn("SQLite getItem failed, fallback to localStorage:", err);
+                    }
+                }
+                return localStorage.getItem(key);
+            },
+
+            async setItem(key, value) {
+                await this.init();
+                if (this.isCapacitor && this.sqliteConn) {
+                    try {
+                        const sql = "INSERT OR REPLACE INTO proofmed_storage (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP);";
+                        if (this.sqliteConn.run) {
+                            await this.sqliteConn.run({ statement: sql, values: [key, value] });
+                            return;
+                        } else if (window.Capacitor?.Plugins?.CapacitorSQLite?.run) {
+                            await window.Capacitor.Plugins.CapacitorSQLite.run({
+                                database: "proofmed.db",
+                                statement: sql,
+                                values: [key, value]
+                            });
+                            return;
+                        } else if (this.sqliteConn.transaction) {
+                            return new Promise((resolve, reject) => {
+                                this.sqliteConn.transaction(tx => {
+                                    tx.executeSql(sql, [key, value], () => resolve(), (_, err) => reject(err));
+                                });
+                            });
+                        }
+                    } catch (err) {
+                        console.warn("SQLite setItem failed, fallback to localStorage:", err);
+                    }
+                }
+                localStorage.setItem(key, value);
+            },
+
+            async removeItem(key) {
+                await this.init();
+                if (this.isCapacitor && this.sqliteConn) {
+                    try {
+                        const sql = "DELETE FROM proofmed_storage WHERE key = ?;";
+                        if (this.sqliteConn.run) {
+                            await this.sqliteConn.run({ statement: sql, values: [key] });
+                            return;
+                        } else if (window.Capacitor?.Plugins?.CapacitorSQLite?.run) {
+                            await window.Capacitor.Plugins.CapacitorSQLite.run({
+                                database: "proofmed.db",
+                                statement: sql,
+                                values: [key]
+                            });
+                            return;
+                        } else if (this.sqliteConn.transaction) {
+                            return new Promise((resolve) => {
+                                this.sqliteConn.transaction(tx => {
+                                    tx.executeSql(sql, [key], () => resolve(), () => resolve());
+                                });
+                            });
+                        }
+                    } catch (err) {
+                        console.warn("SQLite removeItem failed, fallback to localStorage:", err);
+                    }
+                }
+                localStorage.removeItem(key);
+            },
+
+            async getDiaryLogs() {
+                const raw = await this.getItem('proofmed_diary');
+                try {
+                    return raw ? JSON.parse(raw) : [];
+                } catch (e) {
+                    console.error("Fehler beim Parsen der Tagebuch-Logs:", e);
+                    return [];
+                }
+            },
+
+            async setDiaryLogs(logs) {
+                await this.setItem('proofmed_diary', JSON.stringify(logs));
+            }
+        };
+
         /* ZERO-KNOWLEDGE E2EE CLOUD-BACKUP ENGINE (Web Crypto API) */
         function arrayBufferToBase64(buffer) {
             let binary = '';
@@ -888,7 +1086,7 @@
                 return;
             }
 
-            const diaryData = localStorage.getItem('proofmed_diary') || '[]';
+            const diaryData = (await ProofMedStorage.getItem('proofmed_diary')) || '[]';
 
             try {
                 showToast("Verschlüssele Tagebuch mit AES-GCM-256...");
@@ -970,8 +1168,8 @@
                     throw new Error("Wiederhergestellte Daten sind kein gültiges Tagebuch-Array.");
                 }
 
-                localStorage.setItem('proofmed_diary', JSON.stringify(parsed));
-                renderDiaryLogs();
+                await ProofMedStorage.setItem('proofmed_diary', JSON.stringify(parsed));
+                await renderDiaryLogs();
 
                 const count = parsed.length;
                 showToast(`🟢 ${count} Tagebuch-Einträge erfolgreich wiederhergestellt!`);
@@ -989,7 +1187,7 @@
         }
 
         async function saveDiaryEntry(entry) {
-            const logs = JSON.parse(localStorage.getItem('proofmed_diary') || '[]');
+            const logs = await ProofMedStorage.getDiaryLogs();
             
             const arrParts = entry.arrival.split(':').map(Number);
             const depParts = entry.departure.split(':').map(Number);
@@ -1000,12 +1198,12 @@
             entry.proofHash = await generateSHA256(hashString);
 
             logs.unshift(entry);
-            localStorage.setItem('proofmed_diary', JSON.stringify(logs));
-            renderDiaryLogs();
+            await ProofMedStorage.setDiaryLogs(logs);
+            await renderDiaryLogs();
             showToast("Praxisbesuch im Tagebuch gespeichert!");
         }
 
-        function setDiaryFilter(filter) {
+        async function setDiaryFilter(filter) {
             currentDiaryFilter = filter;
             ['active', 'archive', 'all'].forEach(f => {
                 const btn = document.getElementById(`filter-${f}-btn`);
@@ -1017,33 +1215,33 @@
                     }
                 }
             });
-            renderDiaryLogs();
+            await renderDiaryLogs();
         }
 
-        function toggleArchiveDiaryEntry(index) {
-            const logs = JSON.parse(localStorage.getItem('proofmed_diary') || '[]');
+        async function toggleArchiveDiaryEntry(index) {
+            const logs = await ProofMedStorage.getDiaryLogs();
             if (logs[index]) {
                 logs[index].archived = !logs[index].archived;
-                localStorage.setItem('proofmed_diary', JSON.stringify(logs));
-                renderDiaryLogs();
+                await ProofMedStorage.setDiaryLogs(logs);
+                await renderDiaryLogs();
             }
         }
 
-        function deleteDiaryEntry(index) {
+        async function deleteDiaryEntry(index) {
             if (confirm("Diesen Tagebuch-Eintrag wirklich löschen?")) {
-                const logs = JSON.parse(localStorage.getItem('proofmed_diary') || '[]');
+                const logs = await ProofMedStorage.getDiaryLogs();
                 logs.splice(index, 1);
-                localStorage.setItem('proofmed_diary', JSON.stringify(logs));
-                renderDiaryLogs();
+                await ProofMedStorage.setDiaryLogs(logs);
+                await renderDiaryLogs();
                 showToast("Eintrag gelöscht.");
             }
         }
 
-        function renderDiaryLogs() {
+        async function renderDiaryLogs() {
             const container = document.getElementById('diary-logs');
             if (!container) return;
 
-            const logs = JSON.parse(localStorage.getItem('proofmed_diary') || '[]');
+            const logs = await ProofMedStorage.getDiaryLogs();
             
             const filtered = logs.filter(l => {
                 if (currentDiaryFilter === 'active') return !l.archived;
@@ -1173,7 +1371,7 @@
 
             // Get latest non-archived diary entry if date not found
             if (!invoiceDate) {
-                const logs = JSON.parse(localStorage.getItem('proofmed_diary') || '[]');
+                const logs = await ProofMedStorage.getDiaryLogs();
                 const latestLog = logs.filter(l => !l.archived).sort((a, b) => new Date(b.date) - new Date(a.date))[0];
                 invoiceDate = latestLog?.date || new Date().toISOString().split('T')[0];
                 if (latestLog?.practice) practiceName = latestLog.practice;
@@ -1186,10 +1384,10 @@
                 return;
             }
 
-            runAuditEngine(invoiceDate, practiceName, extractedCodes, factors, filename);
+            await runAuditEngine(invoiceDate, practiceName, extractedCodes, factors, filename);
         }
 
-        function runManualAudit() {
+        async function runManualAudit() {
             const defaultDate = new Date().toISOString().split('T')[0];
             const date = document.getElementById('manual-date').value || defaultDate;
             const practice = document.getElementById('manual-practice').value || "Dr. med. Sandra Jakobs";
@@ -1200,10 +1398,10 @@
                 return;
             }
 
-            runAuditEngine(date, practice, selectedCodes, selectedGOACodes, "Manuelle Prüfung");
+            await runAuditEngine(date, practice, selectedCodes, selectedGOACodes, "Manuelle Prüfung");
         }
 
-        function runAuditEngine(date, practice, codes, factors, sourceName) {
+        async function runAuditEngine(date, practice, codes, factors, sourceName) {
             const issues = [];
             let totalClaimed = 0;
             let totalRequiredDuration = 0;
@@ -1233,7 +1431,7 @@
                 issues.push({ code: "5+7/8", severity: 'ERROR', msg: "GOÄ 5 + GOÄ 7/8 Doppeluntersuchung am selben Tag unzulässig." });
             }
 
-            const logs = JSON.parse(localStorage.getItem('proofmed_diary') || '[]');
+            const logs = await ProofMedStorage.getDiaryLogs();
             const matchedLog = logs.find(l => l.date === date);
 
             if (matchedLog) {
@@ -1576,8 +1774,8 @@
             }, 300);
         }
 
-        function exportDossierCSV() {
-            const logs = JSON.parse(localStorage.getItem('proofmed_diary') || '[]');
+        async function exportDossierCSV() {
+            const logs = await ProofMedStorage.getDiaryLogs();
             if (logs.length === 0) {
                 showToast("Keine Einträge zum Exportieren vorhanden.", true);
                 return;
@@ -1599,8 +1797,8 @@
             showToast("CSV-Dossier heruntergeladen!");
         }
 
-        function printDossierPDF() {
-            const logs = JSON.parse(localStorage.getItem('proofmed_diary') || '[]');
+        async function printDossierPDF() {
+            const logs = await ProofMedStorage.getDiaryLogs();
             if (logs.length === 0) {
                 showToast("Keine Tagebucheinträge vorhanden.", true);
                 return;
@@ -1671,9 +1869,10 @@
         }
 
         // Initialize App on DOM Ready
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
+            await ProofMedStorage.init();
             renderGOAChips();
-            renderDiaryLogs();
+            await renderDiaryLogs();
         });
 
         // Register Service Worker for PWA
