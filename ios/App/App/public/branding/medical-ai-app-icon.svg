@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ProofMed – Medical AI App Icon (Master SVG)
+  Eigenstaendig konstruiertes Icon (kein Trace/Bildimport): stilisiertes
+  Stethoskop-Symbol vor Blueprint-/Radar-Hintergrund. Keine externen
+  Referenzen, keine Bilddaten, keine Fremdlogos. Skalierbar 1024px bis 16px.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="ProofMed App-Icon">
+  <title>ProofMed App-Icon</title>
+
+  <defs>
+    <linearGradient id="background-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1855FF"/>
+      <stop offset="100%" stop-color="#6A11CD"/>
+    </linearGradient>
+
+    <linearGradient id="surface-highlight" x1="0%" y1="0%" x2="70%" y2="70%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.35"/>
+      <stop offset="35%" stop-color="#FFFFFF" stop-opacity="0.08"/>
+      <stop offset="60%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <linearGradient id="surface-shade" x1="0%" y1="55%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0A1230" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#0A1230" stop-opacity="0.35"/>
+    </linearGradient>
+
+    <clipPath id="surface-clip">
+      <rect x="0" y="0" width="1024" height="1024" rx="228" ry="228"/>
+    </clipPath>
+
+    <radialGradient id="symbol-fill" gradientUnits="userSpaceOnUse" cx="65" cy="35" r="180">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="55%" stop-color="#F7F8FC"/>
+      <stop offset="100%" stop-color="#DCE1EE"/>
+    </radialGradient>
+
+    <linearGradient id="membrane-fill" x1="20%" y1="10%" x2="90%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="55%" stop-color="#EEF1F8"/>
+      <stop offset="100%" stop-color="#C9D0E3"/>
+    </linearGradient>
+
+    <radialGradient id="membrane-gloss" cx="32%" cy="26%" r="60%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+
+    <radialGradient id="dot-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#BFEFFF" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#BFEFFF" stop-opacity="0"/>
+    </radialGradient>
+
+    <filter id="symbol-drop-shadow-filter" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#0A1230" flood-opacity="0.35"/>
+    </filter>
+
+    <!-- Innerer Schatten: SourceAlpha invertiert, geblurrt, versetzt und mit der
+         Schattenfarbe maskiert -> ergibt einen weichen Ring nur an der Innenkante. -->
+    <filter id="inner-shadow-filter" x="-20%" y="-20%" width="140%" height="140%">
+      <feComponentTransfer in="SourceAlpha" result="inverted-alpha">
+        <feFuncA type="table" tableValues="1 0"/>
+      </feComponentTransfer>
+      <feGaussianBlur in="inverted-alpha" stdDeviation="22" result="blurred"/>
+      <feOffset in="blurred" dx="0" dy="8" result="offset-blurred"/>
+      <feFlood flood-color="#0A1230" flood-opacity="0.5"/>
+      <feComposite in2="offset-blurred" operator="in"/>
+    </filter>
+  </defs>
+
+  <!-- ============ ICON SURFACE (Hintergrund-Badge mit Tiefenwirkung) ============ -->
+  <g id="icon-surface">
+    <rect x="0" y="0" width="1024" height="1024" rx="228" ry="228" fill="url(#background-gradient)"/>
+    <g clip-path="url(#surface-clip)">
+      <rect x="0" y="0" width="1024" height="1024" fill="url(#surface-highlight)"/>
+      <rect x="0" y="0" width="1024" height="1024" fill="url(#surface-shade)"/>
+      <rect x="0" y="0" width="1024" height="1024" rx="228" ry="228" fill="#000000" filter="url(#inner-shadow-filter)"/>
+    </g>
+  </g>
+
+  <!-- ============ BLUEPRINT / RADAR HINTERGRUNDMUSTER ============ -->
+  <g clip-path="url(#surface-clip)">
+    <g id="blueprint-grid" stroke="#EAFBFF" stroke-width="1.5" opacity="0.16">
+      <path d="M0 256h1024M0 448h1024M0 640h1024M0 832h1024"/>
+      <path d="M256 0v1024M448 0v1024M640 0v1024M832 0v1024"/>
+    </g>
+
+    <g id="radar-circles" fill="none" stroke="#EAFBFF" stroke-width="2" opacity="0.18">
+      <circle cx="660" cy="360" r="120"/>
+      <circle cx="660" cy="360" r="210"/>
+      <circle cx="660" cy="360" r="300"/>
+    </g>
+
+    <g id="orbit-lines" fill="none" opacity="0.55">
+      <path d="M780 190 Q860 300 840 430" stroke="#EAFBFF" stroke-width="2" stroke-dasharray="2 14" stroke-linecap="round"/>
+      <path d="M230 700 Q320 620 300 500" stroke="#EAFBFF" stroke-width="2" stroke-dasharray="2 14" stroke-linecap="round"/>
+      <circle cx="780" cy="190" r="20" fill="url(#dot-glow)"/>
+      <circle cx="780" cy="190" r="7" fill="#EAFBFF"/>
+      <circle cx="840" cy="430" r="14" fill="url(#dot-glow)"/>
+      <circle cx="840" cy="430" r="5" fill="#EAFBFF"/>
+      <circle cx="230" cy="700" r="16" fill="url(#dot-glow)"/>
+      <circle cx="230" cy="700" r="6" fill="#EAFBFF"/>
+    </g>
+  </g>
+
+  <!-- ============ HAUPTSYMBOL: Stethoskop-Silhouette ============ -->
+  <g id="symbol-shadow">
+    <g id="stethoscope-symbol" transform="translate(232 138) scale(2.75)" filter="url(#symbol-drop-shadow-filter)">
+      <!-- Rim-Schicht: gleiche Pfade, etwas breiter + kuehleres Grausilber,
+           zuerst gezeichnet -> feine Kantenlinie fuer mehr 3D-Tiefe. -->
+      <g stroke="#B9C2DA" stroke-width="21" fill="none">
+        <path d="M84 16 L48 16 L48 74" stroke-linecap="square" stroke-linejoin="miter" stroke-miterlimit="3"/>
+        <path d="M116 16 L152 16 L152 74" stroke-linecap="square" stroke-linejoin="miter" stroke-miterlimit="3"/>
+        <path d="M48 74 Q48 100 100 116" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M152 74 Q152 100 100 116" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M100 116 C100 150 76 164 76 190 C76 218 104 228 128 214 C145 204 152 186 152 166" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+
+      <!-- Binaurale Buegel: zwei eckige "["/"]"-Formen. Flacher Kappenschnitt
+           (square cap) + scharfe 90-Grad-Biegung (miter-join). Zuerst
+           gezeichnet, damit die runden Verbindungskappen des Schlauchs
+           (unten) ihre unteren Enden nahtlos ueberdecken. -->
+      <path d="M84 16 L48 16 L48 74" fill="none" stroke="url(#symbol-fill)" stroke-width="18" stroke-linecap="square" stroke-linejoin="miter" stroke-miterlimit="3"/>
+      <path d="M116 16 L152 16 L152 74" fill="none" stroke="url(#symbol-fill)" stroke-width="18" stroke-linecap="square" stroke-linejoin="miter" stroke-miterlimit="3"/>
+      <path d="M48 74 Q48 100 100 116" fill="none" stroke="url(#symbol-fill)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M152 74 Q152 100 100 116" fill="none" stroke="url(#symbol-fill)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+
+      <!-- Geschwungener zentraler Schlauch: ein durchgehender, glatter Bogen,
+           der nach unten links schwingt und rechts unten wieder hochfuehrt. -->
+      <path d="M100 116 C100 150 76 164 76 190 C76 218 104 228 128 214 C145 204 152 186 152 166"
+            fill="none" stroke="url(#symbol-fill)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+
+      <!-- Membran / Chestpiece (rechts unten): saubere, solide Kreisscheibe -->
+      <g id="membrane">
+        <circle cx="152" cy="172" r="28" fill="url(#membrane-fill)" stroke="#C3CBE0" stroke-width="2"/>
+        <circle cx="152" cy="172" r="28" fill="none" stroke="#FFFFFF" stroke-width="1.5" opacity="0.7"/>
+        <ellipse cx="144" cy="162" rx="13" ry="9" fill="url(#membrane-gloss)"/>
+      </g>
+
+      <!-- Location-Pin-Spitze: GENAU EINE schlanke, spitz zulaufende Nadel,
+           die exakt von der unteren Mitte der Membran senkrecht nach unten
+           zeigt (kein Dreibein, keine Schraeglage). -->
+      <path d="M144 197 L160 197 L158 208 L146 208 Z" fill="url(#symbol-fill)"/>
+      <path d="M146 206 L158 206 L152 250 Z" fill="url(#symbol-fill)"/>
+      <path d="M152 209 L152 246" stroke="#B9C2DA" stroke-width="1.5" stroke-linecap="round" opacity="0.8"/>
+    </g>
+  </g>
+</svg>

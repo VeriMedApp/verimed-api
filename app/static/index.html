@@ -26,6 +26,14 @@
     <!-- Tesseract.js for OCR -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     
+    <!-- PDF.js for Client-Side PDF Parsing & OCR Canvas Rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        if (typeof pdfjsLib !== 'undefined') {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+    </script>
+    
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -149,7 +157,7 @@
                     <label class="cursor-pointer bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs px-5 py-3 rounded-xl shadow-lg shadow-blue-600/30 transition-all active:scale-95 flex items-center space-x-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 002-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                         <span>Foto / PDF wählen</span>
-                        <input type="file" id="invoice-file" accept="image/*,.pdf" capture="environment" class="hidden" onchange="handleFileUpload(event)">
+                        <input type="file" id="invoice-file" accept="image/*,.pdf" class="hidden" onchange="handleFileUpload(event)">
                     </label>
                 </div>
 
@@ -1454,6 +1462,221 @@
             }
         }
 
+        /**
+         * Image Preprocessing & Normalization on HTML5 Canvas:
+         * - Scales dimensions for optimal OCR character clarity (balanced for mobile memory)
+         * - Converts to grayscale with perceptual luminance weights
+         * - Applies dynamic contrast stretching & thresholding/binarization
+         */
+        async function preprocessImageToCanvas(imageSource) {
+            try {
+                let img;
+                let cleanupUrl = null;
+
+                if (imageSource instanceof HTMLImageElement || imageSource instanceof HTMLCanvasElement || (typeof ImageBitmap !== 'undefined' && imageSource instanceof ImageBitmap)) {
+                    img = imageSource;
+                } else if (imageSource instanceof Blob || imageSource instanceof File) {
+                    const url = URL.createObjectURL(imageSource);
+                    cleanupUrl = url;
+                    img = await new Promise((resolve, reject) => {
+                        const image = new Image();
+                        image.onload = () => resolve(image);
+                        image.onerror = (err) => reject(err);
+                        image.src = url;
+                    });
+                } else {
+                    return imageSource;
+                }
+
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                if (!ctx) return img;
+
+                let width = img.naturalWidth || img.width || 1500;
+                let height = img.naturalHeight || img.height || 2000;
+
+                // Scale for mobile efficiency & crisp OCR font recognition (max 2400px, min 1000px)
+                const maxDim = 2400;
+                if (width > maxDim || height > maxDim) {
+                    const ratio = Math.min(maxDim / width, maxDim / height);
+                    width = Math.round(width * ratio);
+                    height = Math.round(height * ratio);
+                } else if (width < 900 && height < 900) {
+                    const scale = 1200 / Math.max(width, height);
+                    width = Math.round(width * scale);
+                    height = Math.round(height * scale);
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                ctx.drawImage(img, 0, 0, width, height);
+
+                if (cleanupUrl) {
+                    URL.revokeObjectURL(cleanupUrl);
+                }
+
+                // Image processing: Grayscale + Dynamic Contrast Normalization + Thresholding
+                try {
+                    const imgData = ctx.getImageData(0, 0, width, height);
+                    const data = imgData.data;
+                    const len = data.length;
+
+                    let minGray = 255;
+                    let maxGray = 0;
+                    const grays = new Uint8Array(len / 4);
+
+                    for (let i = 0, j = 0; i < len; i += 4, j++) {
+                        const gray = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) | 0;
+                        grays[j] = gray;
+                        if (gray < minGray) minGray = gray;
+                        if (gray > maxGray) maxGray = gray;
+                    }
+
+                    const range = Math.max(1, maxGray - minGray);
+
+                    for (let i = 0, j = 0; i < len; i += 4, j++) {
+                        let normalized = ((grays[j] - minGray) / range) * 255;
+
+                        // Non-linear contrast curve (darkens text, brightens invoice paper background)
+                        if (normalized < 130) {
+                            normalized = Math.max(0, normalized * 0.82);
+                        } else {
+                            normalized = Math.min(255, normalized * 1.18);
+                        }
+
+                        data[i] = normalized;     // R
+                        data[i + 1] = normalized; // G
+                        data[i + 2] = normalized; // B
+                    }
+
+                    ctx.putImageData(imgData, 0, 0);
+                } catch (normErr) {
+                    console.warn("Canvas ImageData normalization note:", normErr);
+                }
+
+                return canvas;
+            } catch (err) {
+                console.warn("preprocessImageToCanvas fallback:", err);
+                return imageSource;
+            }
+        }
+        window.preprocessImageToCanvas = preprocessImageToCanvas;
+
+        /**
+         * PDF Document Processor:
+         * 1. Extracts raw text layer via PDF.js getTextContent()
+         * 2. For scanned PDFs (empty/sparse text), renders pages to HTML5 Canvas at 2.0x scale
+         *    and applies Tesseract OCR parsing with canvas normalization.
+         */
+        async function processPDFDocument(file, onProgress) {
+            let extractedText = '';
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+
+                if (typeof pdfjsLib === 'undefined') {
+                    console.warn("PDF.js library not loaded, falling back to direct OCR.");
+                    return '';
+                }
+
+                if (pdfjsLib.GlobalWorkerOptions && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
+                    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                }
+
+                const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+                const pdf = await loadingTask.promise;
+                const numPages = pdf.numPages || 1;
+                const maxPages = Math.min(numPages, 5);
+
+                // Pass 1: Extract embedded raw digital text
+                let embeddedText = '';
+                for (let i = 1; i <= maxPages; i++) {
+                    if (onProgress) onProgress(15 + Math.round((i / maxPages) * 20), `PDF Seite ${i}/${maxPages} analysieren...`);
+                    const page = await pdf.getPage(i);
+                    const textContent = await page.getTextContent();
+                    const pageText = (textContent.items || []).map(item => item.str).join(' ');
+                    if (pageText.trim()) {
+                        embeddedText += `\n--- Seite ${i} ---\n` + pageText;
+                    }
+                }
+
+                if (embeddedText.replace(/\s+/g, '').length >= 35) {
+                    console.log("PDF.js: Raw embedded digital text successfully extracted.");
+                    return embeddedText;
+                }
+
+                // Pass 2: Scanned PDF without text layer -> Render to Canvas and run Tesseract OCR
+                console.log("PDF.js: Scanned PDF detected, rendering pages to Canvas for Tesseract OCR...");
+                const pagesToOCR = Math.min(numPages, 3);
+                for (let i = 1; i <= pagesToOCR; i++) {
+                    if (onProgress) onProgress(35 + Math.round((i / pagesToOCR) * 15), `PDF Seite ${i} rendern & schärfen...`);
+                    const page = await pdf.getPage(i);
+                    const viewport = page.getViewport({ scale: 2.0 });
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+                    await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+
+                    // Normalize canvas contrast
+                    const processedCanvas = await preprocessImageToCanvas(canvas);
+
+                    if (typeof Tesseract !== 'undefined') {
+                        if (onProgress) onProgress(50 + Math.round((i / pagesToOCR) * 45), `OCR Seite ${i}/${pagesToOCR}...`);
+                        const pageResult = await Tesseract.recognize(processedCanvas, 'deu+eng', {
+                            logger: (m) => {
+                                if (m && m.status === 'recognizing text') {
+                                    const p = Math.round((m.progress || 0) * 100);
+                                    if (onProgress) onProgress(50 + Math.round(p * 0.45), `OCR Seite ${i}: ${p}%`);
+                                }
+                            }
+                        });
+                        if (pageResult?.data?.text) {
+                            extractedText += `\n--- Seite ${i} OCR ---\n` + pageResult.data.text;
+                        }
+                    }
+                }
+            } catch (pdfErr) {
+                console.warn("PDF processing exception handled:", pdfErr);
+            }
+            return extractedText;
+        }
+        window.processPDFDocument = processPDFDocument;
+
+        /**
+         * Normalizes OCR text and fixes common digit typos (e.g. O vs 0, GOA/GOAE vs GOÄ)
+         */
+        function normalizeOCRText(input) {
+            if (!input) return '';
+            let text = String(input);
+
+            // 1. Normalize GOA / GOAE variants to standard GOÄ
+            text = text.replace(/GOAE/gi, 'GOÄ');
+            text = text.replace(/GOA\b/gi, 'GOÄ');
+            text = text.replace(/GOA\s*(\d+|[A-D]|K1)/gi, 'GOÄ $1');
+
+            // 2. Fix O vs 0 and l/I vs 1 when preceded by GOÄ / Ziffer / Nr. / Pos.
+            text = text.replace(/(GOÄ|Ziffer|Nr\.|Pos\.|Zuschlag)\s*([A-Za-z0-9]+)/gi, (match, prefix, val) => {
+                if (/zuschlag/i.test(prefix) && /^[A-DK1]+$/i.test(val)) {
+                    return `${prefix} ${val.toUpperCase()}`;
+                }
+                const fixedVal = val
+                    .replace(/[Oo]/g, '0')
+                    .replace(/[lI](?=\d)/g, '1')
+                    .replace(/(?<=\d)[lI]/g, '1');
+                return `${prefix} ${fixedVal}`;
+            });
+
+            // 3. Fix typical standalone OCR digit misrecognitions (e.g. 25O -> 250, 41O -> 410, 65O -> 650, 2OO -> 200, 2OO6 -> 2006)
+            text = text.replace(/\b(25[Oo]|2[Oo][Oo]|2[Oo][Oo]6|41[Oo]|42[Oo]|65[Oo]|65[lI]|27[lI]|252|271)\b/g, (m) => {
+                return m.replace(/[Oo]/g, '0').replace(/[lI]/g, '1');
+            });
+
+            return text;
+        }
+        window.normalizeOCRText = normalizeOCRText;
+
         async function handleFileUpload(evt) {
             try {
                 const file = evt?.target?.files?.[0];
@@ -1461,83 +1684,107 @@
 
                 uploadedInvoiceFile = file;
                 const fileName = file.name || 'rechnung.pdf';
+                const isPDF = file.type === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf');
 
                 // 1. Show progress bar immediately
-                updateOCRStatus(true, "Rechnung wird verarbeitet...", 10);
+                updateOCRStatus(true, "Dokument wird geladen & analysiert...", 10);
 
                 let progressToast = null;
                 try {
                     progressToast = document.createElement('div');
-                    progressToast.className = 'fixed bottom-4 right-4 bg-blue-600 text-white px-4 py-3 rounded-xl shadow-xl z-50 transition-all';
+                    progressToast.id = 'ocr-live-toast';
+                    progressToast.className = 'fixed bottom-4 right-4 bg-blue-600 text-white px-4 py-3 rounded-xl shadow-xl z-50 transition-all border border-blue-400/30';
                     progressToast.innerHTML = `
                         <div class="flex items-center space-x-3">
-                            <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                            <svg class="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
                             <div>
                                 <div class="font-semibold text-xs">Rechnung analysieren...</div>
-                                <div class="text-[11px] opacity-80" id="ocr-toast-progress">Texterkennung läuft...</div>
+                                <div class="text-[11px] opacity-90" id="ocr-toast-progress">Vorverarbeitung läuft...</div>
                             </div>
                         </div>
                     `;
                     document.body.appendChild(progressToast);
                 } catch (tErr) {}
 
+                const updateToastProgress = (msg) => {
+                    const toastProg = document.getElementById('ocr-toast-progress');
+                    if (toastProg) toastProg.textContent = msg;
+                };
+
                 let extractedText = '';
                 let ocrSuccess = false;
 
-                // 2. Safe async execution of Tesseract OCR
-                try {
-                    if (typeof Tesseract !== 'undefined') {
-                        updateOCRStatus(true, "OCR-Engine wird initialisiert...", 20);
-                        const worker = await Tesseract.createWorker('deu+eng', 1, {
-                            logger: (m) => {
-                                try {
-                                    if (m && m.status === 'recognizing text') {
-                                        const p = Math.round((m.progress || 0) * 100);
-                                        updateOCRStatus(true, `Text erkennen... ${p}%`, 25 + (p * 0.7));
-                                        const toastProg = document.getElementById('ocr-toast-progress');
-                                        if (toastProg) toastProg.textContent = `Text erkennen... ${p}%`;
-                                    }
-                                } catch (logErr) {}
-                            }
-                        });
+                if (isPDF) {
+                    updateOCRStatus(true, "PDF-Dokument wird analysiert...", 15);
+                    updateToastProgress("PDF-Text & Seiten werden geladen...");
 
-                        const res = await Tesseract.recognize(file, 'deu+eng');
-                        extractedText = res?.data?.text || '';
+                    extractedText = await processPDFDocument(file, (pct, status) => {
+                        updateOCRStatus(true, status, pct);
+                        updateToastProgress(status);
+                    });
+
+                    if (extractedText && extractedText.trim().length > 0) {
                         ocrSuccess = true;
-
-                        try {
-                            await worker.terminate();
-                        } catch (termErr) {}
-                    } else {
-                        console.warn("Tesseract library not loaded in window.");
                     }
-                } catch (ocrErr) {
-                    console.warn("Tesseract OCR error safely handled:", ocrErr);
+                } else {
+                    // Image File (JPEG, PNG, HEIC, WebP)
+                    updateOCRStatus(true, "Bild wird normalisiert (Kontrast & Schärfe)...", 20);
+                    updateToastProgress("Kontrast- & Schwellenwert-Filter...");
+
+                    const processedCanvas = await preprocessImageToCanvas(file);
+
+                    // Safe async execution of Tesseract OCR
+                    try {
+                        if (typeof Tesseract !== 'undefined') {
+                            updateOCRStatus(true, "OCR-Engine wird initialisiert...", 30);
+                            updateToastProgress("Tesseract OCR initialisieren...");
+
+                            const res = await Tesseract.recognize(processedCanvas, 'deu+eng', {
+                                logger: (m) => {
+                                    try {
+                                        if (m && m.status === 'recognizing text') {
+                                            const p = Math.round((m.progress || 0) * 100);
+                                            updateOCRStatus(true, `Text erkennen... ${p}%`, 30 + Math.round(p * 0.65));
+                                            updateToastProgress(`Texterkennung: ${p}%`);
+                                        }
+                                    } catch (logErr) {}
+                                }
+                            });
+
+                            extractedText = res?.data?.text || '';
+                            if (extractedText.trim().length > 0) {
+                                ocrSuccess = true;
+                            }
+                        } else {
+                            console.warn("Tesseract library not loaded in window.");
+                        }
+                    } catch (ocrErr) {
+                        console.warn("Tesseract OCR error safely handled:", ocrErr);
+                    }
                 }
 
                 // Cleanup progress UI
                 if (progressToast) {
                     try { progressToast.remove(); } catch (e) {}
                 }
-                updateOCRStatus(true, ocrSuccess ? "OCR abgeschlossen!" : "OCR übersprungen - Dateianalyse", 100);
+                updateOCRStatus(true, ocrSuccess ? "Erkennung abgeschlossen!" : "Dateianalyse beendet", 100);
                 setTimeout(() => {
                     updateOCRStatus(false);
-                }, 1500);
+                }, 1200);
 
-                if (ocrSuccess) {
-                    showToast("OCR abgeschlossen – Rechnung wird geprüft...");
-                } else {
-                    showToast("OCR eingeschränkt – Metadaten werden geprüft...", false);
-                }
+                // Browser debug logging of extracted raw text
+                console.log("Extracted raw text:", extractedText);
 
                 // 3. Pass extracted text (or filename fallback) to parseOCRAndAudit
                 await parseOCRAndAudit(extractedText, fileName);
 
             } catch (fatalErr) {
                 console.error("handleFileUpload exception safely caught:", fatalErr);
+                const pt = document.getElementById('ocr-live-toast');
+                if (pt) { try { pt.remove(); } catch (e) {} }
                 updateOCRStatus(false);
                 showToast(`Fehler beim Upload: ${fatalErr.message || fatalErr}`, true);
             }
@@ -1548,44 +1795,118 @@
             try {
                 const text = rawText || '';
                 const fname = filename || 'rechnung.pdf';
+                const normalizedText = normalizeOCRText(text);
+
                 console.log('OCR Raw Text:', text);
+                console.log('OCR Normalized Text:', normalizedText);
 
-                // Extract GOÄ codes
-                const codeMatches = [...text.matchAll(/GOÄ\s*(\d+[A-Z]?)|Ziffer\s*(\d+)|Nr\.\s*(\d+)|Pos\.\s*(\d+)/gi)];
-                let extractedCodes = [...new Set(codeMatches.map(m => (m[1] || m[2] || m[3] || m[4]).replace(/[^0-9A-Z]/gi, '')))].filter(Boolean);
+                const extractedCodes = [];
+                const factors = {};
+                const knownCodes = Object.keys(GOA_CATALOG);
 
-                // Extract multipliers (e.g., "2.3x", "3,5x", "1.0-fach")
-                const multiplierMatches = [...text.matchAll(/(\d+[,.]\d+)\s*(?:x|-fach|fach)/gi)];
-                const multipliers = multiplierMatches.map(m => parseFloat(m[1].replace(',', '.')));
+                // Helper to add unique codes
+                const addCode = (rawCode, factor = null) => {
+                    if (!rawCode) return;
+                    let c = String(rawCode).trim().toUpperCase();
+                    if (/^\d+$/.test(c)) c = String(parseInt(c, 10));
+                    if ((knownCodes.includes(c) || /^\d+$/.test(c)) && !extractedCodes.includes(c)) {
+                        extractedCodes.push(c);
+                    }
+                    if (factor !== null && !isNaN(factor) && factor > 0 && factor <= 10 && !factors[c]) {
+                        factors[c] = factor;
+                    }
+                };
 
-                // Extract treatment date
-                let invoiceDate = null;
-                const dateMatch = text.match(/(?:Datum|Behandlungstag|vom|am)[:\s]*(\d{1,2})[./](\d{1,2})[./](\d{4})/i);
-                if (dateMatch) {
-                    const [, day, month, year] = dateMatch;
-                    invoiceDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-                }
+                // Line-by-line parsing for precise GOÄ code and multiplier binding
+                const lines = normalizedText.split(/\r?\n/);
+                lines.forEach(line => {
+                    const trimmedLine = line.trim();
+                    if (!trimmedLine) return;
 
-                // Extract practice name (heuristic: look for "Dr.", "Praxis", "MVZ")
-                let practiceName = "Unbekannte Praxis";
-                const practiceMatch = text.match(/((?:Dr\.|Praxis|MVZ)[^\n]{5,60})/i);
-                if (practiceMatch) {
-                    practiceName = practiceMatch[1].trim();
-                }
+                    // Extract multiplier from this line (e.g., "2,3x", "3.5x", "1,8-fach", "2.3-fach", "1.0x", "2,5x")
+                    const lineFactorMatches = [...trimmedLine.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:x|-fach|fach)\b/gi)];
+                    let lineFactor = null;
+                    if (lineFactorMatches.length > 0) {
+                        const parsedF = parseFloat(lineFactorMatches[0][1].replace(',', '.'));
+                        if (!isNaN(parsedF) && parsedF > 0 && parsedF <= 10) {
+                            lineFactor = parsedF;
+                        }
+                    }
+
+                    // a) Standard prefixes: GOÄ, GOA, GOAE, Ziffer, Nr., Pos.
+                    const prefixMatches = [...trimmedLine.matchAll(/(?:GOÄ|Ziffer|Nr\.|Pos\.)\s*([0-9]+|[A-D]|K1)\b/gi)];
+                    prefixMatches.forEach(pm => {
+                        addCode(pm[1], lineFactor);
+                    });
+
+                    // b) Surcharges: Zuschlag A-D / K1
+                    const surchargeMatches = [...trimmedLine.matchAll(/(?:Zuschlag|Zuschl\.?)\s*([A-D]|K1)\b/gi)];
+                    surchargeMatches.forEach(sm => {
+                        addCode(sm[1], lineFactor || 1.0);
+                    });
+
+                    // c) Numbers accompanied by factors: e.g. "1 ... 2,3x", "3 ... 3,5x", "8 ... 2,3x", "250 ... 1,8x"
+                    if (lineFactor !== null) {
+                        knownCodes.forEach(kc => {
+                            const codeRegex = new RegExp(`(^|[^a-zA-Z0-9])${kc}([^a-zA-Z0-9]|$)`, 'i');
+                            if (codeRegex.test(trimmedLine)) {
+                                addCode(kc, lineFactor);
+                            }
+                        });
+                    }
+                });
+
+                // Global fallback matching across entire normalized text
+                const globalPrefixMatches = [...normalizedText.matchAll(/(?:GOÄ|Ziffer|Nr\.|Pos\.)\s*([0-9]+|[A-D]|K1)\b/gi)];
+                globalPrefixMatches.forEach(m => addCode(m[1]));
+
+                const globalSurcharges = [...normalizedText.matchAll(/(?:Zuschlag|Zuschl\.?)\s*([A-D]|K1)\b/gi)];
+                globalSurcharges.forEach(m => addCode(m[1], 1.0));
+
+                // Global multipliers extraction for sequential fallback
+                const globalMultiplierMatches = [...normalizedText.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:x|-fach|fach)\b/gi)];
+                const globalMultipliers = globalMultiplierMatches
+                    .map(m => parseFloat(m[1].replace(',', '.')))
+                    .filter(f => !isNaN(f) && f > 0 && f <= 10);
 
                 // Fallback from filename if OCR yielded no codes
                 if (extractedCodes.length === 0 && fname) {
-                    const fileCodeMatches = [...fname.matchAll(/(?:goa|ziffer|nr|pos)[-_]?(\d+)/gi)];
-                    if (fileCodeMatches.length > 0) {
-                        extractedCodes = [...new Set(fileCodeMatches.map(m => m[1]))];
+                    const fileCodeMatches = [...fname.matchAll(/(?:goa|goae|ziffer|nr|pos)[-_]?(\d+|[a-d]|k1)/gi)];
+                    fileCodeMatches.forEach(m => addCode(m[1]));
+                }
+
+                // Assign default factors for any remaining codes
+                extractedCodes.forEach((code, idx) => {
+                    if (!factors[code]) {
+                        factors[code] = globalMultipliers[idx] || (GOA_CATALOG[code] ? GOA_CATALOG[code].defaultFactor : 2.3);
+                    }
+                });
+
+                // Extract treatment date patterns (DD.MM.YYYY or YYYY-MM-DD or DD/MM/YYYY)
+                let invoiceDate = null;
+                const dateMatch = normalizedText.match(/(?:Datum|Behandlungstag|Behandlungsdatum|vom|am|Rechnungsdatum|Leistungsdatum)[:\s]*(\d{1,2})[./-](\d{1,2})[./-](\d{4})/i);
+                if (dateMatch) {
+                    const [, day, month, year] = dateMatch;
+                    invoiceDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                } else {
+                    const isoMatch = normalizedText.match(/\b(\d{4})[-/](\d{2})[-/](\d{2})\b/);
+                    if (isoMatch) {
+                        invoiceDate = `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+                    } else {
+                        const genericDateMatch = normalizedText.match(/\b(\d{1,2})[./](\d{1,2})[./](\d{4})\b/);
+                        if (genericDateMatch) {
+                            const [, day, month, year] = genericDateMatch;
+                            invoiceDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                        }
                     }
                 }
 
-                // Build factors object (match codes with multipliers in order)
-                const factors = {};
-                extractedCodes.forEach((code, idx) => {
-                    factors[code] = multipliers[idx] || (GOA_CATALOG[code] ? GOA_CATALOG[code].defaultFactor : 2.3);
-                });
+                // Extract practice name (heuristic: look for "Dr.", "Praxis", "MVZ", "Klinik")
+                let practiceName = "Unbekannte Praxis";
+                const practiceMatch = normalizedText.match(/((?:Dr\.|Praxis|MVZ|Gemeinschaftspraxis|Klinik|Institut)[^\n\r]{3,60})/i);
+                if (practiceMatch) {
+                    practiceName = practiceMatch[1].replace(/[\,\:\;]+$/, '').trim();
+                }
 
                 // Get latest non-archived diary entry if date not found
                 if (!invoiceDate) {
@@ -1601,7 +1922,7 @@
 
                 console.log('Extracted:', { codes: extractedCodes, factors, date: invoiceDate, practice: practiceName });
 
-                // Pre-fill inputs
+                // Pre-fill manual date and practice inputs
                 try {
                     const dateInput = document.getElementById('manual-date');
                     const practiceInput = document.getElementById('manual-practice');
@@ -1614,6 +1935,21 @@
                     return;
                 }
 
+                // Populate manual testing preview section automatically with detected codes and factors
+                try {
+                    selectedGOACodes = {};
+                    extractedCodes.forEach(code => {
+                        selectedGOACodes[code] = factors[code] || (GOA_CATALOG[code] ? GOA_CATALOG[code].defaultFactor : 2.3);
+                    });
+                    renderGOAChips();
+                } catch (uiErr) {
+                    console.warn("Manual preview update note:", uiErr);
+                }
+
+                // Status Toast Feedback
+                showToast(`🟢 ${extractedCodes.length} GOÄ-Ziffern erfolgreich aus Dokument ausgelesen!`);
+
+                // Run Audit Engine
                 await runAuditEngine(invoiceDate, practiceName, extractedCodes, factors, fname);
             } catch (err) {
                 console.error("parseOCRAndAudit error:", err);
@@ -2144,6 +2480,9 @@
         window.toggleArchiveDiaryEntry = toggleArchiveDiaryEntry;
         window.deleteDiaryEntry = deleteDiaryEntry;
         window.renderDiaryLogs = renderDiaryLogs;
+        window.preprocessImageToCanvas = preprocessImageToCanvas;
+        window.processPDFDocument = processPDFDocument;
+        window.normalizeOCRText = normalizeOCRText;
         window.handleFileUpload = handleFileUpload;
         window.parseOCRAndAudit = parseOCRAndAudit;
         window.runManualAudit = runManualAudit;
