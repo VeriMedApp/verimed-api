@@ -27,10 +27,10 @@
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     
     <!-- PDF.js for Client-Side PDF Parsing & OCR Canvas Rendering -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
     <script>
-        if (typeof pdfjsLib !== 'undefined') {
-            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        if (window.pdfjsLib) {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
         }
     </script>
     
@@ -157,7 +157,7 @@
                     <label class="cursor-pointer bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs px-5 py-3 rounded-xl shadow-lg shadow-blue-600/30 transition-all active:scale-95 flex items-center space-x-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 002-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                         <span>Foto / PDF wählen</span>
-                        <input type="file" id="invoice-file" accept="image/*,.pdf" class="hidden" onchange="handleFileUpload(event)">
+                        <input type="file" id="invoice-file" accept="image/*,application/pdf,.pdf" class="hidden" onchange="handleFileUpload(event)">
                     </label>
                 </div>
 
@@ -319,6 +319,11 @@
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
                             <span>PDF drucken</span>
                         </button>
+                    </div>
+
+                    <div id="invoice-attach-indicator" class="hidden text-[10px] text-emerald-400 border-t border-slate-800/80 pt-2 leading-tight flex items-center space-x-1.5">
+                        <svg class="w-3.5 h-3.5 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                        <span><strong>Originalbeleg wird dem Einwand-Dossier automatisch beigefügt</strong> (<span id="invoice-attach-filename"></span>)</span>
                     </div>
 
                     <div class="text-[10px] text-slate-500 border-t border-slate-800/80 pt-2 leading-tight flex items-center space-x-1.5">
@@ -1426,7 +1431,10 @@
             }).join('');
         }
 
-        let uploadedInvoiceFile = null;
+        // Holds { type: 'image'|'pdf', dataUrl, name, pages: [dataUrl, ...] } for the
+        // most recently uploaded invoice, so it can be embedded into the Einwand PDF.
+        let currentUploadedInvoice = null;
+        window.currentUploadedInvoice = null;
 
         function updateOCRStatus(show, text = '', percent = 0) {
             try {
@@ -1464,9 +1472,9 @@
 
         /**
          * Image Preprocessing & Normalization on HTML5 Canvas:
-         * - Scales dimensions for optimal OCR character clarity (balanced for mobile memory)
-         * - Converts to grayscale with perceptual luminance weights
-         * - Applies dynamic contrast stretching & thresholding/binarization
+         * - Downscales image if dimensions exceed 1800px (ensuring fast, crisp OCR on mobile & desktop)
+         * - Applies grayscale luminance weighting (0.299*R + 0.587*G + 0.114*B)
+         * - Applies dynamic binarization and contrast stretching to sharpen printed text and remove paper shadows
          */
         async function preprocessImageToCanvas(imageSource) {
             try {
@@ -1492,16 +1500,16 @@
                 const ctx = canvas.getContext('2d', { willReadFrequently: true });
                 if (!ctx) return img;
 
-                let width = img.naturalWidth || img.width || 1500;
-                let height = img.naturalHeight || img.height || 2000;
+                let width = img.naturalWidth || img.width || 1200;
+                let height = img.naturalHeight || img.height || 1600;
 
-                // Scale for mobile efficiency & crisp OCR font recognition (max 2400px, min 1000px)
-                const maxDim = 2400;
+                // Downscale image if dimensions exceed 1800px
+                const maxDim = 1800;
                 if (width > maxDim || height > maxDim) {
                     const ratio = Math.min(maxDim / width, maxDim / height);
                     width = Math.round(width * ratio);
                     height = Math.round(height * ratio);
-                } else if (width < 900 && height < 900) {
+                } else if (width < 800 && height < 800) {
                     const scale = 1200 / Math.max(width, height);
                     width = Math.round(width * scale);
                     height = Math.round(height * scale);
@@ -1515,7 +1523,7 @@
                     URL.revokeObjectURL(cleanupUrl);
                 }
 
-                // Image processing: Grayscale + Dynamic Contrast Normalization + Thresholding
+                // Grayscale luminance weighting (0.299*R + 0.587*G + 0.114*B) + dynamic binarization / contrast stretching
                 try {
                     const imgData = ctx.getImageData(0, 0, width, height);
                     const data = imgData.data;
@@ -1537,11 +1545,11 @@
                     for (let i = 0, j = 0; i < len; i += 4, j++) {
                         let normalized = ((grays[j] - minGray) / range) * 255;
 
-                        // Non-linear contrast curve (darkens text, brightens invoice paper background)
+                        // Dynamic binarization & contrast curve: sharpen printed text, eliminate paper shadows
                         if (normalized < 130) {
-                            normalized = Math.max(0, normalized * 0.82);
+                            normalized = Math.max(0, normalized * 0.80);
                         } else {
-                            normalized = Math.min(255, normalized * 1.18);
+                            normalized = Math.min(255, normalized * 1.20);
                         }
 
                         data[i] = normalized;     // R
@@ -1564,30 +1572,32 @@
 
         /**
          * PDF Document Processor:
-         * 1. Extracts raw text layer via PDF.js getTextContent()
-         * 2. For scanned PDFs (empty/sparse text), renders pages to HTML5 Canvas at 2.0x scale
-         *    and applies Tesseract OCR parsing with canvas normalization.
+         * 1. Extracts embedded digital text using pdfjsLib.getDocument() and page.getTextContent()
+         * 2. If extracted text length > 30 characters, returns extracted string directly.
+         * 3. Fallback for scanned PDFs: Renders Page 1 to an HTML5 Canvas (scale 2.0)
+         *    and passes the canvas context to Tesseract.recognize().
          */
         async function processPDFDocument(file, onProgress) {
             let extractedText = '';
             try {
                 const arrayBuffer = await file.arrayBuffer();
 
-                if (typeof pdfjsLib === 'undefined') {
+                if (typeof pdfjsLib === 'undefined' && typeof window.pdfjsLib === 'undefined') {
                     console.warn("PDF.js library not loaded, falling back to direct OCR.");
                     return '';
                 }
 
-                if (pdfjsLib.GlobalWorkerOptions && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
-                    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                const pdfLib = window.pdfjsLib || pdfjsLib;
+                if (pdfLib.GlobalWorkerOptions && !pdfLib.GlobalWorkerOptions.workerSrc) {
+                    pdfLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
                 }
 
-                const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+                const loadingTask = pdfLib.getDocument({ data: arrayBuffer });
                 const pdf = await loadingTask.promise;
                 const numPages = pdf.numPages || 1;
                 const maxPages = Math.min(numPages, 5);
 
-                // Pass 1: Extract embedded raw digital text
+                // Pass 1: Extract embedded digital text
                 let embeddedText = '';
                 for (let i = 1; i <= maxPages; i++) {
                     if (onProgress) onProgress(15 + Math.round((i / maxPages) * 20), `PDF Seite ${i}/${maxPages} analysieren...`);
@@ -1599,42 +1609,40 @@
                     }
                 }
 
-                if (embeddedText.replace(/\s+/g, '').length >= 35) {
-                    console.log("PDF.js: Raw embedded digital text successfully extracted.");
+                // If extracted text length > 30 characters, return extracted string directly
+                if (embeddedText.replace(/\s+/g, '').length > 30 || embeddedText.trim().length > 30) {
+                    console.log("PDF.js: Raw embedded digital text successfully extracted (> 30 characters).");
                     return embeddedText;
                 }
 
-                // Pass 2: Scanned PDF without text layer -> Render to Canvas and run Tesseract OCR
-                console.log("PDF.js: Scanned PDF detected, rendering pages to Canvas for Tesseract OCR...");
-                const pagesToOCR = Math.min(numPages, 3);
-                for (let i = 1; i <= pagesToOCR; i++) {
-                    if (onProgress) onProgress(35 + Math.round((i / pagesToOCR) * 15), `PDF Seite ${i} rendern & schärfen...`);
-                    const page = await pdf.getPage(i);
-                    const viewport = page.getViewport({ scale: 2.0 });
+                // Pass 2: Fallback for scanned PDFs -> Render Page 1 to HTML5 Canvas (scale 2.0) and pass canvas to Tesseract.recognize()
+                console.log("PDF.js: Scanned PDF detected (<= 30 chars text). Rendering Page 1 to Canvas (scale 2.0) for Tesseract OCR...");
+                if (onProgress) onProgress(40, "PDF Seite 1 rendern & schärfen...");
+                const page1 = await pdf.getPage(1);
+                const viewport = page1.getViewport({ scale: 2.0 });
 
-                    const canvas = document.createElement('canvas');
-                    canvas.width = viewport.width;
-                    canvas.height = viewport.height;
-                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                const canvas = document.createElement('canvas');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-                    await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+                await page1.render({ canvasContext: ctx, viewport: viewport }).promise;
 
-                    // Normalize canvas contrast
-                    const processedCanvas = await preprocessImageToCanvas(canvas);
+                // Normalize canvas contrast
+                const processedCanvas = await preprocessImageToCanvas(canvas);
 
-                    if (typeof Tesseract !== 'undefined') {
-                        if (onProgress) onProgress(50 + Math.round((i / pagesToOCR) * 45), `OCR Seite ${i}/${pagesToOCR}...`);
-                        const pageResult = await Tesseract.recognize(processedCanvas, 'deu+eng', {
-                            logger: (m) => {
-                                if (m && m.status === 'recognizing text') {
-                                    const p = Math.round((m.progress || 0) * 100);
-                                    if (onProgress) onProgress(50 + Math.round(p * 0.45), `OCR Seite ${i}: ${p}%`);
-                                }
+                if (typeof Tesseract !== 'undefined') {
+                    if (onProgress) onProgress(60, "Tesseract OCR Seite 1 läuft...");
+                    const pageResult = await Tesseract.recognize(processedCanvas, 'deu+eng', {
+                        logger: (m) => {
+                            if (m && m.status === 'recognizing text') {
+                                const p = Math.round((m.progress || 0) * 100);
+                                if (onProgress) onProgress(60 + Math.round(p * 0.35), `OCR Seite 1: ${p}%`);
                             }
-                        });
-                        if (pageResult?.data?.text) {
-                            extractedText += `\n--- Seite ${i} OCR ---\n` + pageResult.data.text;
                         }
+                    });
+                    if (pageResult?.data?.text) {
+                        extractedText = pageResult.data.text;
                     }
                 }
             } catch (pdfErr) {
@@ -1644,8 +1652,73 @@
         }
         window.processPDFDocument = processPDFDocument;
 
+        // Reads a File as a base64 data URL (used to embed the original, unprocessed
+        // invoice image into the generated Einwand dossier).
+        function fileToDataURL(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(reader.error || new Error('FileReader failed'));
+                reader.readAsDataURL(file);
+            });
+        }
+        window.fileToDataURL = fileToDataURL;
+
+        // Renders each page of an uploaded PDF to a JPEG data URL for visual embedding
+        // as attachment pages in the Einwand dossier (separate from the OCR text pass).
+        async function renderPDFPagesToDataURLs(file, maxPages = 5) {
+            const pages = [];
+            try {
+                const pdfLib = window.pdfjsLib || (typeof pdfjsLib !== 'undefined' ? pdfjsLib : null);
+                if (!pdfLib) return pages;
+                if (pdfLib.GlobalWorkerOptions && !pdfLib.GlobalWorkerOptions.workerSrc) {
+                    pdfLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+                }
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfLib.getDocument({ data: arrayBuffer }).promise;
+                const numPages = Math.min(pdf.numPages || 1, maxPages);
+                for (let i = 1; i <= numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const viewport = page.getViewport({ scale: 1.5 });
+                    const canvas = document.createElement('canvas');
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+                    const ctx = canvas.getContext('2d');
+                    await page.render({ canvasContext: ctx, viewport }).promise;
+                    pages.push(canvas.toDataURL('image/jpeg', 0.85));
+                }
+            } catch (e) {
+                console.warn("PDF page render for dossier attachment failed (non-fatal):", e);
+            }
+            return pages;
+        }
+        window.renderPDFPagesToDataURLs = renderPDFPagesToDataURLs;
+
+        // Builds the "Anlage / Beweisdokument" attachment section(s) for the Einwand PDF:
+        // one page per embedded image, each fit to A4 margins with aspect ratio preserved.
+        // Returns '' when no invoice was uploaded, so the fallback 1-page objection stays clean.
+        function buildInvoiceAttachmentHTML() {
+            if (!currentUploadedInvoice || !Array.isArray(currentUploadedInvoice.pages) || currentUploadedInvoice.pages.length === 0) {
+                return '';
+            }
+            const safeName = String(currentUploadedInvoice.name || 'Beleg').replace(/[<>&]/g, '');
+            const pages = currentUploadedInvoice.pages;
+            return pages.map((pageDataUrl, idx) => `
+                <div style="page-break-before: always;">
+                    <h2 style="font-size:14pt; color:#0f172a; border-bottom:2px solid #2563eb; padding-bottom:8px;">Anlage: Originalbeleg / Eingereichte Liquidation (Dateiname: ${safeName})</h2>
+                    ${pages.length > 1 ? `<p style="font-size:9pt; color:#64748b;">Seite ${idx + 1} von ${pages.length}</p>` : ''}
+                    <div style="width:100%; text-align:center; margin-top:16px;">
+                        <img src="${pageDataUrl}" style="max-width:100%; max-height:250mm; object-fit:contain; border:1px solid #cbd5e1; border-radius:4px;">
+                    </div>
+                </div>
+            `).join('');
+        }
+        window.buildInvoiceAttachmentHTML = buildInvoiceAttachmentHTML;
+
         /**
-         * Normalizes OCR text and fixes common digit typos (e.g. O vs 0, GOA/GOAE vs GOÄ)
+         * Normalizes OCR text and fixes common digit typos:
+         * - Normalize typos: replace GOA / GOAE with GOÄ, Ziffer/Nr./Pos. with GOÄ 
+         * - Fix digit confusions: 25O -> 250, 65O -> 650, 2OO -> 200, 2OO6 -> 2006, 41O -> 410, 42O -> 420
          */
         function normalizeOCRText(input) {
             if (!input) return '';
@@ -1656,8 +1729,19 @@
             text = text.replace(/GOA\b/gi, 'GOÄ');
             text = text.replace(/GOA\s*(\d+|[A-D]|K1)/gi, 'GOÄ $1');
 
-            // 2. Fix O vs 0 and l/I vs 1 when preceded by GOÄ / Ziffer / Nr. / Pos.
-            text = text.replace(/(GOÄ|Ziffer|Nr\.|Pos\.|Zuschlag)\s*([A-Za-z0-9]+)/gi, (match, prefix, val) => {
+            // 2. Replace Ziffer / Nr. / Pos. with GOÄ 
+            text = text.replace(/\b(?:Ziffer|Nr\.|Pos\.)\s*/gi, 'GOÄ ');
+
+            // 3. Fix digit confusions: 25O -> 250, 65O -> 650, 2OO -> 200, 2OO6 -> 2006, 41O -> 410, 42O -> 420
+            text = text.replace(/\b25[Oo]\b/g, '250');
+            text = text.replace(/\b65[Oo]\b/g, '650');
+            text = text.replace(/\b2[Oo][Oo]\b/g, '200');
+            text = text.replace(/\b2[Oo][Oo]6\b/g, '2006');
+            text = text.replace(/\b41[Oo]\b/g, '410');
+            text = text.replace(/\b42[Oo]\b/g, '420');
+
+            // Fix O/0 and l/I confusions after GOÄ or Zuschlag
+            text = text.replace(/(GOÄ|Zuschlag)\s*([A-Za-z0-9]+)/gi, (match, prefix, val) => {
                 if (/zuschlag/i.test(prefix) && /^[A-DK1]+$/i.test(val)) {
                     return `${prefix} ${val.toUpperCase()}`;
                 }
@@ -1666,11 +1750,6 @@
                     .replace(/[lI](?=\d)/g, '1')
                     .replace(/(?<=\d)[lI]/g, '1');
                 return `${prefix} ${fixedVal}`;
-            });
-
-            // 3. Fix typical standalone OCR digit misrecognitions (e.g. 25O -> 250, 41O -> 410, 65O -> 650, 2OO -> 200, 2OO6 -> 2006)
-            text = text.replace(/\b(25[Oo]|2[Oo][Oo]|2[Oo][Oo]6|41[Oo]|42[Oo]|65[Oo]|65[lI]|27[lI]|252|271)\b/g, (m) => {
-                return m.replace(/[Oo]/g, '0').replace(/[lI]/g, '1');
             });
 
             return text;
@@ -1682,9 +1761,29 @@
                 const file = evt?.target?.files?.[0];
                 if (!file) return;
 
-                uploadedInvoiceFile = file;
                 const fileName = file.name || 'rechnung.pdf';
                 const isPDF = file.type === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf');
+
+                // Capture the original file for later embedding into the Einwand PDF.
+                // Wrapped in its own fail-safe block: attachment capture must never block OCR.
+                currentUploadedInvoice = null;
+                window.currentUploadedInvoice = null;
+                try {
+                    if (isPDF) {
+                        const pdfPages = await renderPDFPagesToDataURLs(file);
+                        if (pdfPages.length > 0) {
+                            currentUploadedInvoice = { type: 'pdf', name: fileName, dataUrl: pdfPages[0], pages: pdfPages };
+                        }
+                    } else {
+                        const dataUrl = await fileToDataURL(file);
+                        currentUploadedInvoice = { type: 'image', name: fileName, dataUrl, pages: [dataUrl] };
+                    }
+                    window.currentUploadedInvoice = currentUploadedInvoice;
+                } catch (attachErr) {
+                    console.warn("Invoice attachment capture failed (non-fatal):", attachErr);
+                    currentUploadedInvoice = null;
+                    window.currentUploadedInvoice = null;
+                }
 
                 // 1. Show progress bar immediately
                 updateOCRStatus(true, "Dokument wird geladen & analysiert...", 10);
@@ -1766,14 +1865,14 @@
                     }
                 }
 
-                // Cleanup progress UI
+                // Cleanup progress UI / Hide progress bar upon completion
                 if (progressToast) {
                     try { progressToast.remove(); } catch (e) {}
                 }
                 updateOCRStatus(true, ocrSuccess ? "Erkennung abgeschlossen!" : "Dateianalyse beendet", 100);
                 setTimeout(() => {
                     updateOCRStatus(false);
-                }, 1200);
+                }, 1000);
 
                 // Browser debug logging of extracted raw text
                 console.log("Extracted raw text:", extractedText);
@@ -1791,10 +1890,10 @@
         }
         window.handleFileUpload = handleFileUpload;
 
-        async function parseOCRAndAudit(rawText, filename) {
+        async function parseOCRAndAudit(rawText, sourceName) {
             try {
                 const text = rawText || '';
-                const fname = filename || 'rechnung.pdf';
+                const fname = sourceName || 'rechnung.pdf';
                 const normalizedText = normalizeOCRText(text);
 
                 console.log('OCR Raw Text:', text);
@@ -1817,13 +1916,22 @@
                     }
                 };
 
-                // Line-by-line parsing for precise GOÄ code and multiplier binding
+                // Explanatory/footer/test-note lines are never treated as billing rows,
+                // no matter what numbers or letters they happen to contain.
+                const SKIP_LINE_PATTERN = /^(Hinweis|Test-Hinweis|ProofMed|Mindestbehandlungszeit|Rechtlicher Hinweis|Zahlungsziel|Bankverbindung|IBAN|Steuernummer|Impressum|Anmerkung)\b/i;
+
+                // Strict line-by-line parsing: a GOÄ code is only accepted when the line carries
+                // an explicit GOÄ identifier immediately followed by the code, AND the same line
+                // also carries either a multiplier factor (e.g. "3,5x") or a currency amount.
+                // This prevents free-standing numbers (e.g. "60 Minuten") or price fragments
+                // (e.g. "34,97 €" -> "34") from ever being mistaken for a billing line.
                 const lines = normalizedText.split(/\r?\n/);
                 lines.forEach(line => {
                     const trimmedLine = line.trim();
                     if (!trimmedLine) return;
+                    if (SKIP_LINE_PATTERN.test(trimmedLine)) return;
 
-                    // Extract multiplier from this line (e.g., "2,3x", "3.5x", "1,8-fach", "2.3-fach", "1.0x", "2,5x")
+                    // Extract multiplier from this line (e.g., "2,3x", "3.5x", "1,8-fach", "2.3-fach")
                     const lineFactorMatches = [...trimmedLine.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:x|-fach|fach)\b/gi)];
                     let lineFactor = null;
                     if (lineFactorMatches.length > 0) {
@@ -1833,52 +1941,30 @@
                         }
                     }
 
-                    // a) Standard prefixes: GOÄ, GOA, GOAE, Ziffer, Nr., Pos.
-                    const prefixMatches = [...trimmedLine.matchAll(/(?:GOÄ|Ziffer|Nr\.|Pos\.)\s*([0-9]+|[A-D]|K1)\b/gi)];
-                    prefixMatches.forEach(pm => {
-                        addCode(pm[1], lineFactor);
-                    });
+                    // Currency amount on this line (e.g. "34,97 €", "76.17 EUR")
+                    const hasAmount = /\d+[.,]\d{2}\s*(?:€|EUR)\b/i.test(trimmedLine);
+                    if (lineFactor === null && !hasAmount) return;
+
+                    // a) Standard identifier: GOÄ (normalizeOCRText already folds GOA/Ziffer/Nr./Pos. into GOÄ)
+                    const prefixMatches = [...trimmedLine.matchAll(/\bGOÄ\s*([0-9]{1,4}|[A-D]|K1)\b/gi)];
+                    prefixMatches.forEach(pm => addCode(pm[1], lineFactor));
 
                     // b) Surcharges: Zuschlag A-D / K1
-                    const surchargeMatches = [...trimmedLine.matchAll(/(?:Zuschlag|Zuschl\.?)\s*([A-D]|K1)\b/gi)];
-                    surchargeMatches.forEach(sm => {
-                        addCode(sm[1], lineFactor || 1.0);
-                    });
-
-                    // c) Numbers accompanied by factors: e.g. "1 ... 2,3x", "3 ... 3,5x", "8 ... 2,3x", "250 ... 1,8x"
-                    if (lineFactor !== null) {
-                        knownCodes.forEach(kc => {
-                            const codeRegex = new RegExp(`(^|[^a-zA-Z0-9])${kc}([^a-zA-Z0-9]|$)`, 'i');
-                            if (codeRegex.test(trimmedLine)) {
-                                addCode(kc, lineFactor);
-                            }
-                        });
-                    }
+                    const surchargeMatches = [...trimmedLine.matchAll(/\b(?:Zuschlag|Zuschl\.?)\s*([A-D]|K1)\b/gi)];
+                    surchargeMatches.forEach(sm => addCode(sm[1], lineFactor || 1.0));
                 });
 
-                // Global fallback matching across entire normalized text
-                const globalPrefixMatches = [...normalizedText.matchAll(/(?:GOÄ|Ziffer|Nr\.|Pos\.)\s*([0-9]+|[A-D]|K1)\b/gi)];
-                globalPrefixMatches.forEach(m => addCode(m[1]));
-
-                const globalSurcharges = [...normalizedText.matchAll(/(?:Zuschlag|Zuschl\.?)\s*([A-D]|K1)\b/gi)];
-                globalSurcharges.forEach(m => addCode(m[1], 1.0));
-
-                // Global multipliers extraction for sequential fallback
-                const globalMultiplierMatches = [...normalizedText.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:x|-fach|fach)\b/gi)];
-                const globalMultipliers = globalMultiplierMatches
-                    .map(m => parseFloat(m[1].replace(',', '.')))
-                    .filter(f => !isNaN(f) && f > 0 && f <= 10);
-
-                // Fallback from filename if OCR yielded no codes
+                // Fallback from filename if OCR yielded no codes at all
                 if (extractedCodes.length === 0 && fname) {
                     const fileCodeMatches = [...fname.matchAll(/(?:goa|goae|ziffer|nr|pos)[-_]?(\d+|[a-d]|k1)/gi)];
                     fileCodeMatches.forEach(m => addCode(m[1]));
                 }
 
-                // Assign default factors for any remaining codes
-                extractedCodes.forEach((code, idx) => {
+                // Any code that matched without a captured line-level multiplier falls back
+                // to its GOÄ catalog default factor (never to an unrelated line's multiplier).
+                extractedCodes.forEach(code => {
                     if (!factors[code]) {
-                        factors[code] = globalMultipliers[idx] || (GOA_CATALOG[code] ? GOA_CATALOG[code].defaultFactor : 2.3);
+                        factors[code] = GOA_CATALOG[code] ? GOA_CATALOG[code].defaultFactor : 2.3;
                     }
                 });
 
@@ -1901,11 +1987,17 @@
                     }
                 }
 
-                // Extract practice name (heuristic: look for "Dr.", "Praxis", "MVZ", "Klinik")
+                // Extract practice name (heuristic: look for "Dr.", "Praxis", "MVZ", "Klinik").
+                // The match is cut at the first separator/status/price marker so headers like
+                // "MVZ Philippstor Düren · Warnfall / 76,17 €" yield only "MVZ Philippstor Düren".
                 let practiceName = "Unbekannte Praxis";
-                const practiceMatch = normalizedText.match(/((?:Dr\.|Praxis|MVZ|Gemeinschaftspraxis|Klinik|Institut)[^\n\r]{3,60})/i);
+                const practiceMatch = normalizedText.match(/((?:Dr\.|Praxis|MVZ|Gemeinschaftspraxis|Klinik|Institut)[^\n\r]{3,80})/i);
                 if (practiceMatch) {
-                    practiceName = practiceMatch[1].replace(/[\,\:\;]+$/, '').trim();
+                    const candidate = practiceMatch[1]
+                        .split(/\s*[·|•]\s*|\s+\/\s+|\d+[.,]\d{2}\s*€|\bWarnfall\b|\bRechnung(?:sdatum)?\b|\bDatum\b/i)[0]
+                        .replace(/[\,\:\;\-\s]+$/, '')
+                        .trim();
+                    if (candidate) practiceName = candidate;
                 }
 
                 // Get latest non-archived diary entry if date not found
@@ -1935,12 +2027,13 @@
                     return;
                 }
 
-                // Populate manual testing preview section automatically with detected codes and factors
+                // Match codes with multiplier factors and store matched codes in selectedGOACodes
                 try {
                     selectedGOACodes = {};
                     extractedCodes.forEach(code => {
                         selectedGOACodes[code] = factors[code] || (GOA_CATALOG[code] ? GOA_CATALOG[code].defaultFactor : 2.3);
                     });
+                    // Automatically invoke renderGOAChips()
                     renderGOAChips();
                 } catch (uiErr) {
                     console.warn("Manual preview update note:", uiErr);
@@ -1949,7 +2042,7 @@
                 // Status Toast Feedback
                 showToast(`🟢 ${extractedCodes.length} GOÄ-Ziffern erfolgreich aus Dokument ausgelesen!`);
 
-                // Run Audit Engine
+                // Automatically invoke runAuditEngine()
                 await runAuditEngine(invoiceDate, practiceName, extractedCodes, factors, fname);
             } catch (err) {
                 console.error("parseOCRAndAudit error:", err);
@@ -2148,6 +2241,15 @@
                 }
 
                 lastAuditData = { practice, date, codes, totalClaimed, issues, matchedLog, objectionBody };
+
+                // Show/hide the "Originalbeleg wird automatisch beigefügt" indicator
+                const attachIndicator = document.getElementById('invoice-attach-indicator');
+                const attachFilename = document.getElementById('invoice-attach-filename');
+                const hasInvoicePages = currentUploadedInvoice && Array.isArray(currentUploadedInvoice.pages) && currentUploadedInvoice.pages.length > 0;
+                if (attachIndicator) {
+                    attachIndicator.classList.toggle('hidden', !hasInvoicePages);
+                    if (hasInvoicePages && attachFilename) attachFilename.textContent = currentUploadedInvoice.name || '';
+                }
             } else {
                 objectionCard?.classList.add('hidden');
             }
@@ -2200,7 +2302,16 @@
             if (!lastAuditData) return;
 
             const { practice, date, codes, totalClaimed, issues, matchedLog, objectionBody } = lastAuditData;
-            
+
+            // Tamper-proof integrity stamp for page 1, covering the objection content itself
+            // (independent of the geofence proof hash, so it exists even without a matched log).
+            const documentHash = await generateSHA256(JSON.stringify({
+                practice, date, totalClaimed, codes,
+                issues: issues.map(i => i.msg),
+                objectionBody,
+                invoice: currentUploadedInvoice ? currentUploadedInvoice.name : null
+            }));
+
             // Generate HTML content for the PDF
             const htmlContent = `
                 <!DOCTYPE html>
@@ -2219,6 +2330,7 @@
                         .geofence { background: #d4edda; border: 1px solid #c3e6cb; padding: 15px; margin: 20px 0; }
                         .hash { font-family: monospace; font-size: 10px; word-break: break-all; color: #666; }
                         .freeze-badge { background: #dc3545; color: white; padding: 15px; text-align: center; font-weight: bold; margin: 20px 0; border-radius: 5px; }
+                        .footer { margin-top: 30px; font-size: 9px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px; }
                     </style>
                 </head>
                 <body>
@@ -2226,24 +2338,24 @@
                         <div class="logo">ProofMed</div>
                         <p>Pre-Payment Audit System</p>
                     </div>
-                    
+
                     <h1>Formeller Einwand zur Liquidation</h1>
-                    
+
                     <p><strong>Praxis:</strong> ${practice}</p>
                     <p><strong>Datum:</strong> ${date}</p>
                     <p><strong>Gesamtbetrag:</strong> ${totalClaimed.toFixed(2)} €</p>
                     <p><strong>GOÄ-Ziffern:</strong> ${codes.join(', ')}</p>
-                    
-                    ${(issues.some(i => i.severity === 'ERROR') || issues.some(i => i.severity === 'WARN')) ? 
+
+                    ${(issues.some(i => i.severity === 'ERROR') || issues.some(i => i.severity === 'WARN')) ?
                         '<div class="freeze-badge">⛔ ZAHLUNG GESTOPPT – Warten auf korrigierte Liquidation (Frist eingefroren)</div>' : ''}
-                    
+
                     <h2>Festgestellte Abweichungen</h2>
                     ${issues.map(i => `
                         <div class="issue ${i.severity === 'ERROR' ? 'error' : 'warn'}">
                             <strong>[${i.severity}]</strong> ${i.msg}
                         </div>
                     `).join('')}
-                    
+
                     ${matchedLog ? `
                         <div class="geofence">
                             <h3>Verifizierter Geofence-Anwesenheitsnachweis</h3>
@@ -2253,11 +2365,15 @@
                             <p class="hash"><strong>SHA-256 Audit Hash:</strong><br>${matchedLog.proofHash}</p>
                         </div>
                     ` : ''}
-                    
+
                     <h2>Einwand-Text</h2>
                     <pre style="white-space: pre-wrap; background: #f5f5f5; padding: 15px; border-radius: 5px;">${objectionBody}</pre>
-                    
-                    ${uploadedInvoiceFile ? '<div style="page-break-before: always;"></div><h2>Anhang: Rechnung</h2><p><em>Siehe angehängte Datei: ' + uploadedInvoiceFile.name + '</em></p>' : ''}
+
+                    <div class="footer">
+                        Dokumenten-Integritätsstempel (SHA-256): <span class="hash">${documentHash}</span>
+                    </div>
+
+                    ${buildInvoiceAttachmentHTML()}
                 </body>
                 </html>
             `;
@@ -2301,8 +2417,18 @@
             showToast("Bitte als PDF speichern oder drucken");
         }
 
-        function printObjectionPDF() {
+        async function printObjectionPDF() {
             if (!lastAuditData) return;
+
+            // Tamper-proof integrity stamp for page 1 (see shareObjectionPDF for rationale).
+            const documentHash = await generateSHA256(JSON.stringify({
+                practice: lastAuditData.practice,
+                date: lastAuditData.date,
+                totalClaimed: lastAuditData.totalClaimed,
+                issues: lastAuditData.issues.map(i => i.msg),
+                objectionBody: lastAuditData.objectionBody,
+                invoice: currentUploadedInvoice ? currentUploadedInvoice.name : null
+            }));
 
             const iframe = document.createElement('iframe');
             iframe.style.position = 'fixed';
@@ -2348,8 +2474,11 @@
                     <p style="white-space: pre-wrap; margin-top: 20px;">${lastAuditData.objectionBody}</p>
 
                     <div class="footer">
-                        Erstellt mit ProofMed Pre-Payment Audit Assistant. 100% DSGVO-konform.
+                        Erstellt mit ProofMed Pre-Payment Audit Assistant. 100% DSGVO-konform.<br>
+                        Dokumenten-Integritätsstempel (SHA-256): <span style="font-family: monospace; word-break: break-all;">${documentHash}</span>
                     </div>
+
+                    ${buildInvoiceAttachmentHTML()}
                 </body>
                 </html>
             `);
