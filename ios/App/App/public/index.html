@@ -568,7 +568,7 @@
             "4": { name: "Fremdanamnese / Unterweisung", type: "personal", rate1x: 12.82, defaultFactor: 2.3, minDuration: 0 },
             "5": { name: "Symptombezogene Untersuchung", type: "personal", rate1x: 4.66, defaultFactor: 2.3, minDuration: 0 },
             "7": { name: "Untersuchung eines Organsystems", type: "personal", rate1x: 9.33, defaultFactor: 2.3, minDuration: 0 },
-            "8": { name: "Ganzkörperstatus", type: "personal", rate1x: 14.57, defaultFactor: 2.3, minDuration: 20 },
+            "8": { name: "Ganzkörperstatus", type: "personal", rate1x: 15.21, defaultFactor: 2.3, minDuration: 20 },
             "11": { name: "Rektale Untersuchung", type: "personal", rate1x: 5.25, defaultFactor: 2.3, minDuration: 0 },
             "34": { name: "Erörterung lebensverändernde Erkrankung (mind. 20 Min.)", type: "personal", rate1x: 17.49, defaultFactor: 2.3, minDuration: 20 },
             "50": { name: "Hausbesuch", type: "personal", rate1x: 18.65, defaultFactor: 2.3, minDuration: 0 },
@@ -1920,38 +1920,48 @@
                 // no matter what numbers or letters they happen to contain.
                 const SKIP_LINE_PATTERN = /^(Hinweis|Test-Hinweis|ProofMed|Mindestbehandlungszeit|Rechtlicher Hinweis|Zahlungsziel|Bankverbindung|IBAN|Steuernummer|Impressum|Anmerkung)\b/i;
 
+                // Extracts the multiplier factor (e.g. "3,5x", "1,8-fach") from a text segment.
+                const extractFactor = (segment) => {
+                    const fm = segment.match(/(\d+(?:[.,]\d+)?)\s*(?:x|-fach|fach)\b/i);
+                    if (!fm) return null;
+                    const pf = parseFloat(fm[1].replace(',', '.'));
+                    return (!isNaN(pf) && pf > 0 && pf <= 10) ? pf : null;
+                };
+
                 // Strict line-by-line parsing: a GOÄ code is only accepted when the line carries
-                // an explicit GOÄ identifier immediately followed by the code, AND the same line
-                // also carries either a multiplier factor (e.g. "3,5x") or a currency amount.
-                // This prevents free-standing numbers (e.g. "60 Minuten") or price fragments
-                // (e.g. "34,97 €" -> "34") from ever being mistaken for a billing line.
+                // an explicit GOÄ identifier immediately followed by the code, AND the line also
+                // carries either a multiplier factor (e.g. "3,5x") or a currency amount somewhere.
+                // Each code is bound to the multiplier found in ITS OWN segment of the line — the
+                // text between that code and the next GOÄ/Zuschlag identifier (or line end) — so
+                // OCR merging several invoice rows onto one text line never lets one row's factor
+                // (e.g. GOÄ 1's 1,0x) leak onto a neighboring row's code (e.g. GOÄ 3's 3,5x).
                 const lines = normalizedText.split(/\r?\n/);
                 lines.forEach(line => {
                     const trimmedLine = line.trim();
                     if (!trimmedLine) return;
                     if (SKIP_LINE_PATTERN.test(trimmedLine)) return;
 
-                    // Extract multiplier from this line (e.g., "2,3x", "3.5x", "1,8-fach", "2.3-fach")
-                    const lineFactorMatches = [...trimmedLine.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:x|-fach|fach)\b/gi)];
-                    let lineFactor = null;
-                    if (lineFactorMatches.length > 0) {
-                        const parsedF = parseFloat(lineFactorMatches[0][1].replace(',', '.'));
-                        if (!isNaN(parsedF) && parsedF > 0 && parsedF <= 10) {
-                            lineFactor = parsedF;
-                        }
-                    }
-
-                    // Currency amount on this line (e.g. "34,97 €", "76.17 EUR")
-                    const hasAmount = /\d+[.,]\d{2}\s*(?:€|EUR)\b/i.test(trimmedLine);
-                    if (lineFactor === null && !hasAmount) return;
+                    const hasFactor = /(\d+(?:[.,]\d+)?)\s*(?:x|-fach|fach)\b/i.test(trimmedLine);
+                    // Note: no \b after €/EUR — € is a non-word char, so \b never matches when
+                    // followed by whitespace/newline/end. A negative lookahead is used instead.
+                    const hasAmount = /\d+[.,]\d{2}\s*(?:€|EUR)(?![a-zA-Z0-9])/i.test(trimmedLine);
+                    if (!hasFactor && !hasAmount) return;
 
                     // a) Standard identifier: GOÄ (normalizeOCRText already folds GOA/Ziffer/Nr./Pos. into GOÄ)
-                    const prefixMatches = [...trimmedLine.matchAll(/\bGOÄ\s*([0-9]{1,4}|[A-D]|K1)\b/gi)];
-                    prefixMatches.forEach(pm => addCode(pm[1], lineFactor));
+                    const idMatches = [...trimmedLine.matchAll(/\bGOÄ\s*([0-9]{1,4}|[A-D]|K1)\b/gi)];
+                    idMatches.forEach((im, idx) => {
+                        const segEnd = idx + 1 < idMatches.length ? idMatches[idx + 1].index : trimmedLine.length;
+                        const segment = trimmedLine.slice(im.index + im[0].length, segEnd);
+                        addCode(im[1], extractFactor(segment));
+                    });
 
-                    // b) Surcharges: Zuschlag A-D / K1
-                    const surchargeMatches = [...trimmedLine.matchAll(/\b(?:Zuschlag|Zuschl\.?)\s*([A-D]|K1)\b/gi)];
-                    surchargeMatches.forEach(sm => addCode(sm[1], lineFactor || 1.0));
+                    // b) Surcharges: Zuschlag A-D / K1 (same nearest-factor pairing)
+                    const surMatches = [...trimmedLine.matchAll(/\b(?:Zuschlag|Zuschl\.?)\s*([A-D]|K1)\b/gi)];
+                    surMatches.forEach((sm, idx) => {
+                        const segEnd = idx + 1 < surMatches.length ? surMatches[idx + 1].index : trimmedLine.length;
+                        const segment = trimmedLine.slice(sm.index + sm[0].length, segEnd);
+                        addCode(sm[1], extractFactor(segment) || 1.0);
+                    });
                 });
 
                 // Fallback from filename if OCR yielded no codes at all
@@ -2012,7 +2022,21 @@
                     }
                 }
 
-                console.log('Extracted:', { codes: extractedCodes, factors, date: invoiceDate, practice: practiceName });
+                // Extract the actual invoice total (the primary claim amount) — prefer an
+                // explicitly labeled total line (Gesamtbetrag/Rechnungsbetrag/...), otherwise
+                // fall back to the largest currency amount found anywhere in the document.
+                let invoiceTotal = null;
+                const totalLabelMatch = normalizedText.match(/(?:Gesamtbetrag|Rechnungsbetrag|Endbetrag|Gesamtsumme|Zu\s*zahlender?\s*Betrag|Gesamt)[^\d€\n]{0,20}(\d+[.,]\d{2})\s*(?:€|EUR)/i);
+                if (totalLabelMatch) {
+                    invoiceTotal = parseFloat(totalLabelMatch[1].replace(',', '.'));
+                } else {
+                    const allAmounts = [...normalizedText.matchAll(/(\d+[.,]\d{2})\s*(?:€|EUR)(?![a-zA-Z0-9])/gi)]
+                        .map(m => parseFloat(m[1].replace(',', '.')))
+                        .filter(v => !isNaN(v) && v > 0);
+                    if (allAmounts.length > 0) invoiceTotal = Math.max(...allAmounts);
+                }
+
+                console.log('Extracted:', { codes: extractedCodes, factors, date: invoiceDate, practice: practiceName, invoiceTotal });
 
                 // Pre-fill manual date and practice inputs
                 try {
@@ -2043,7 +2067,7 @@
                 showToast(`🟢 ${extractedCodes.length} GOÄ-Ziffern erfolgreich aus Dokument ausgelesen!`);
 
                 // Automatically invoke runAuditEngine()
-                await runAuditEngine(invoiceDate, practiceName, extractedCodes, factors, fname);
+                await runAuditEngine(invoiceDate, practiceName, extractedCodes, factors, fname, invoiceTotal);
             } catch (err) {
                 console.error("parseOCRAndAudit error:", err);
                 showToast("Fehler bei der Rechnungsanalyse: " + (err.message || err), true);
@@ -2071,10 +2095,10 @@
         }
         window.runManualAudit = runManualAudit;
 
-        async function runAuditEngine(date, practice, codes, factors, sourceName) {
+        async function runAuditEngine(date, practice, codes, factors, sourceName, extractedTotal = null) {
             try {
                 const issues = [];
-                let totalClaimed = 0;
+                let computedTotal = 0;
                 let totalRequiredDuration = 0;
 
                 (codes || []).forEach(code => {
@@ -2083,7 +2107,7 @@
 
                     const factor = factors[code] || item.defaultFactor || 2.3;
                     let price = item.rate1x * factor;
-                    totalClaimed += price;
+                    computedTotal += price;
                     totalRequiredDuration += (item.minDuration || 0);
 
                     if (item.type === 'personal' && factor > 2.3 && factor <= 3.5) {
@@ -2119,6 +2143,13 @@
                         });
                     }
                 }
+
+                // The actual amount claimed on the invoice is the primary Gesamtbetrag whenever
+                // OCR could extract one; the sum of selected GOÄ codes is only a fallback (e.g.
+                // for purely manual code entry, where no invoice was ever read).
+                const totalClaimed = (typeof extractedTotal === 'number' && !isNaN(extractedTotal) && extractedTotal > 0)
+                    ? extractedTotal
+                    : computedTotal;
 
                 displayAuditResults(sourceName, date, practice, codes, totalClaimed, issues, matchedLog);
             } catch (err) {
