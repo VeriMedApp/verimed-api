@@ -417,6 +417,19 @@
             <div class="glass-card p-5 rounded-2xl space-y-4">
                 <div class="flex items-center justify-between border-b border-slate-800 pb-3">
                     <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                        <svg class="w-4 h-4 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                        <span>Fälle mit Zahlungsstopp</span>
+                    </h3>
+                </div>
+                <p class="text-xs text-slate-400 leading-relaxed">Jeder gesendete Einwand wird hier als Fall geführt, bis eine korrigierte Rechnung vorliegt.</p>
+                <div class="space-y-2" id="dossier-cases-list">
+                    <!-- Dynamically populated by renderCasesDossier() -->
+                </div>
+            </div>
+
+            <div class="glass-card p-5 rounded-2xl space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <h3 class="text-sm font-bold text-white flex items-center space-x-2">
                         <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                         <span>Jahres-Dossier & Beihilfe Export</span>
                     </h3>
@@ -548,6 +561,9 @@
                 // If user switched to diary or dossier, trigger render if available
                 if (targetTab === 'diary' && typeof window.renderDiaryLogs === 'function') {
                     try { window.renderDiaryLogs(); } catch (e) {}
+                }
+                if (targetTab === 'dossier' && typeof window.renderCasesDossier === 'function') {
+                    try { window.renderCasesDossier(); } catch (e) {}
                 }
             } catch (err) {
                 console.error("switchTab error:", err);
@@ -1085,26 +1101,39 @@
             },
 
             async getDiaryLogs() {
+                let parsed = null;
                 try {
                     const raw = await this.getItem('proofmed_diary');
                     if (raw) {
-                        const parsed = JSON.parse(raw);
-                        if (Array.isArray(parsed)) return parsed;
+                        const p = JSON.parse(raw);
+                        if (Array.isArray(p)) parsed = p;
                     }
-                    return [];
                 } catch (e) {
                     console.warn("Fehler beim Laden/Parsen der Tagebuch-Logs, Fallback auf localStorage:", e);
                     try {
                         const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('proofmed_diary') : null;
                         if (raw) {
-                            const parsed = JSON.parse(raw);
-                            if (Array.isArray(parsed)) return parsed;
+                            const p = JSON.parse(raw);
+                            if (Array.isArray(p)) parsed = p;
                         }
-                        return [];
-                    } catch (err) {
-                        return [];
-                    }
+                    } catch (err) {}
                 }
+                if (!parsed) return [];
+
+                // Backfill stable ids for legacy entries saved before case-linking existed,
+                // so Dossier cases can reference a diary entry by id instead of a fragile
+                // array index. Persisted in the background; the caller gets the ids now.
+                let backfilled = false;
+                parsed.forEach(entry => {
+                    if (entry && !entry.id) {
+                        entry.id = generateEntryId('diary_');
+                        backfilled = true;
+                    }
+                });
+                if (backfilled) {
+                    this.setItem('proofmed_diary', JSON.stringify(parsed)).catch(() => {});
+                }
+                return parsed;
             },
 
             async setDiaryLogs(logs) {
@@ -1119,9 +1148,58 @@
                         }
                     } catch (err) {}
                 }
+            },
+
+            // Persistent Case model — one record per objection sent, linking the Audit,
+            // Diary, and Dossier tabs. Stored the same way as diary logs: a single JSON
+            // blob under its own key, via the existing SQLite/localStorage getItem/setItem.
+            async getCases() {
+                try {
+                    const raw = await this.getItem('proofmed_cases');
+                    if (raw) {
+                        const parsed = JSON.parse(raw);
+                        if (Array.isArray(parsed)) return parsed;
+                    }
+                    return [];
+                } catch (e) {
+                    console.warn("Fehler beim Laden/Parsen der Fälle, Fallback auf localStorage:", e);
+                    try {
+                        const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('proofmed_cases') : null;
+                        if (raw) {
+                            const parsed = JSON.parse(raw);
+                            if (Array.isArray(parsed)) return parsed;
+                        }
+                        return [];
+                    } catch (err) {
+                        return [];
+                    }
+                }
+            },
+
+            async setCases(cases) {
+                try {
+                    const safeCases = Array.isArray(cases) ? cases : [];
+                    await this.setItem('proofmed_cases', JSON.stringify(safeCases));
+                } catch (e) {
+                    console.error("Fehler beim Speichern der Fälle:", e);
+                    try {
+                        if (typeof localStorage !== 'undefined') {
+                            localStorage.setItem('proofmed_cases', JSON.stringify(Array.isArray(cases) ? cases : []));
+                        }
+                    } catch (err) {}
+                }
             }
         };
         window.ProofMedStorage = ProofMedStorage;
+
+        // Stable id generator shared by diary entries and cases (crypto.randomUUID where
+        // available, with a fallback for older WebViews).
+        function generateEntryId(prefix = '') {
+            const rand = (typeof crypto !== 'undefined' && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+            return prefix + rand;
+        }
 
         /* ZERO-KNOWLEDGE E2EE CLOUD-BACKUP ENGINE (Web Crypto API) */
         function arrayBufferToBase64(buffer) {
@@ -1336,7 +1414,9 @@
 
         async function saveDiaryEntry(entry) {
             const logs = await ProofMedStorage.getDiaryLogs();
-            
+
+            entry.id = entry.id || generateEntryId('diary_');
+
             const arrParts = entry.arrival.split(':').map(Number);
             const depParts = entry.departure.split(':').map(Number);
             const durationMin = Math.max(0, (depParts[0]*60 + depParts[1]) - (arrParts[0]*60 + arrParts[1]));
@@ -1390,7 +1470,8 @@
             if (!container) return;
 
             const logs = await ProofMedStorage.getDiaryLogs();
-            
+            const cases = await ProofMedStorage.getCases();
+
             const filtered = logs.filter(l => {
                 if (currentDiaryFilter === 'active') return !l.archived;
                 if (currentDiaryFilter === 'archived') return l.archived;
@@ -1405,6 +1486,8 @@
             container.innerHTML = filtered.map((log, originalIdx) => {
                 const realIdx = logs.indexOf(log);
                 const isGPS = log.logType === 'GPS_LIVE';
+                const linkedCase = log.id ? cases.find(c => c.diaryEntryId === log.id) : null;
+                const caseMeta = linkedCase ? caseStatusMeta(linkedCase.status) : null;
                 return `
                     <div class="glass-card p-4 rounded-xl border-slate-800 space-y-2 text-xs">
                         <div class="flex items-start justify-between">
@@ -1416,6 +1499,11 @@
                                 ${isGPS ? '<span class="relative flex h-1.5 w-1.5"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span></span><span>GPS Live</span>' : '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg><span>Manuell</span>'}
                             </span>
                         </div>
+                        ${linkedCase ? `
+                            <button onclick="switchTab('dossier')" class="w-full text-left ${caseMeta.badgeClass} px-2.5 py-1.5 rounded-lg text-[10px] font-semibold border inline-flex items-center space-x-1.5">
+                                <span>${caseMeta.emoji}</span><span>Verknüpft: ${caseMeta.label} · ${linkedCase.doctorName}</span>
+                            </button>
+                        ` : ''}
                         <div class="text-[10px] font-mono text-slate-500 truncate">
                             SHA-256: ${log.proofHash || 'n/a'}
                         </div>
@@ -2525,6 +2613,159 @@
             }
         }
 
+        /* ==========================================================================
+           CASE & PAYMENT-FREEZE LIFECYCLE (Audit ↔ Diary ↔ Dossier)
+           A "case" is created/updated whenever an objection is actually sent (mail or
+           share), persisting the "Zahlung gestoppt" state beyond the current Audit view
+           and linking it to the matching Diary entry, so the Dossier tab can track it
+           through to resolution.
+           ========================================================================== */
+        const CASE_STATUS_META = {
+            FROZEN: { emoji: '🔴', label: 'Zahlung gestoppt', badgeClass: 'bg-rose-500/10 text-rose-400 border-rose-500/20' },
+            WAITING_CORRECTION: { emoji: '🟠', label: 'Wartet auf Korrektur', badgeClass: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+            RESOLVED: { emoji: '🟢', label: 'Erledigt', badgeClass: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+        };
+        function caseStatusMeta(status) {
+            return CASE_STATUS_META[status] || CASE_STATUS_META.FROZEN;
+        }
+
+        // Creates or updates the persistent case for the current audit whenever the user
+        // actually sends the objection (mail or share) — identified by invoiceDate +
+        // doctorName, since that's the natural "same audit" key before a case id exists.
+        // Never throws: a storage hiccup here must not block the mail/share action itself.
+        async function upsertCaseFromObjection() {
+            if (!lastAuditData) return null;
+            try {
+                const { practice, date, totalClaimed, matchedLog, issues, objectionBody } = lastAuditData;
+
+                const sha256Hash = (matchedLog && matchedLog.proofHash) || await generateSHA256(JSON.stringify({
+                    practice, date, totalClaimed,
+                    issues: issues.map(i => i.msg),
+                    objectionBody
+                }));
+
+                const cases = await ProofMedStorage.getCases();
+                const existingIdx = cases.findIndex(c => c.invoiceDate === date && c.doctorName === practice);
+                const existing = existingIdx >= 0 ? cases[existingIdx] : null;
+
+                const caseRecord = {
+                    id: existing ? existing.id : generateEntryId('case_'),
+                    invoiceDate: date,
+                    doctorName: practice,
+                    totalAmount: totalClaimed,
+                    status: 'FROZEN',
+                    objectionDate: new Date().toISOString().split('T')[0],
+                    sha256Hash,
+                    diaryEntryId: (matchedLog && matchedLog.id) || (existing && existing.diaryEntryId) || null,
+                    receiptDataUrl: (currentUploadedInvoice && currentUploadedInvoice.dataUrl) || (existing && existing.receiptDataUrl) || null,
+                };
+
+                if (existingIdx >= 0) {
+                    cases[existingIdx] = caseRecord;
+                } else {
+                    cases.unshift(caseRecord);
+                }
+
+                await ProofMedStorage.setCases(cases);
+
+                // Keep whichever of Diary/Dossier the user is currently looking at fresh.
+                try { await renderDiaryLogs(); } catch (e) {}
+                try { await renderCasesDossier(); } catch (e) {}
+
+                return caseRecord;
+            } catch (e) {
+                console.warn("Fall konnte nicht gespeichert werden (nicht kritisch):", e);
+                return null;
+            }
+        }
+        window.upsertCaseFromObjection = upsertCaseFromObjection;
+
+        async function markCaseResolved(caseId) {
+            try {
+                const cases = await ProofMedStorage.getCases();
+                const idx = cases.findIndex(c => c.id === caseId);
+                if (idx === -1) return;
+                cases[idx].status = 'RESOLVED';
+                await ProofMedStorage.setCases(cases);
+                await renderCasesDossier();
+                await renderDiaryLogs();
+                showToast("Fall als korrigiert markiert!");
+            } catch (e) {
+                console.error("markCaseResolved error:", e);
+                showToast("Fehler beim Aktualisieren des Falls: " + (e.message || e), true);
+            }
+        }
+        window.markCaseResolved = markCaseResolved;
+
+        // "Einwand erneut öffnen": drafts a follow-up reminder email referencing the
+        // stored case (the original issues/objection text aren't part of the persisted
+        // case model, only its audit-result fields, so this re-opens as a reminder rather
+        // than replaying the original letter verbatim).
+        async function reopenCaseObjection(caseId) {
+            try {
+                const cases = await ProofMedStorage.getCases();
+                const c = cases.find(x => x.id === caseId);
+                if (!c) return;
+
+                const email = derivePracticeEmail(c.doctorName);
+                const body = `Sehr geehrte Damen und Herren,\n\nich verweise erneut auf meinen formellen Einwand vom ${c.objectionDate} bezüglich der Liquidation vom ${c.invoiceDate} (${c.doctorName}, Gesamtbetrag: ${c.totalAmount.toFixed(2)} €).\n\nBislang liegt mir keine korrigierte Rechnung vor. Ich bitte um zeitnahe Bearbeitung, da die Zahlung bis dahin eingefroren bleibt.\n\nDokumenten-Referenz (SHA-256): ${c.sha256Hash || 'n/a'}\n\nMit freundlichen Grüßen`;
+                const crlfBody = body.replace(/\r\n|\r|\n/g, '\r\n');
+
+                window.location.href = `mailto:${email}?subject=${encodeURIComponent('Erinnerung: Formeller Einwand vom ' + c.objectionDate)}&body=${encodeURIComponent(crlfBody)}`;
+                showToast("Erinnerungs-E-Mail wird geöffnet...");
+            } catch (e) {
+                console.error("reopenCaseObjection error:", e);
+                showToast("Fehler beim Öffnen des Einwands: " + (e.message || e), true);
+            }
+        }
+        window.reopenCaseObjection = reopenCaseObjection;
+
+        async function renderCasesDossier() {
+            const container = document.getElementById('dossier-cases-list');
+            if (!container) return;
+
+            const cases = await ProofMedStorage.getCases();
+
+            if (cases.length === 0) {
+                container.innerHTML = '<div class="glass-card p-6 text-center text-xs text-slate-500 rounded-xl">Noch keine Fälle mit Zahlungsstopp erfasst.</div>';
+                return;
+            }
+
+            const sorted = [...cases].sort((a, b) => String(b.objectionDate || '').localeCompare(String(a.objectionDate || '')));
+
+            container.innerHTML = sorted.map(c => {
+                const meta = caseStatusMeta(c.status);
+                return `
+                    <div class="glass-card p-4 rounded-xl border-slate-800 space-y-2 text-xs">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <div class="font-bold text-white text-sm">${c.doctorName}</div>
+                                <div class="text-slate-400 text-[11px] mt-0.5">Rechnungsdatum: ${c.invoiceDate} · Einwand gesendet: ${c.objectionDate}</div>
+                            </div>
+                            <span class="${meta.badgeClass} px-2.5 py-1 rounded-full text-[10px] font-semibold border inline-flex items-center space-x-1 shrink-0">
+                                <span>${meta.emoji}</span><span>${meta.label}</span>
+                            </span>
+                        </div>
+                        <div class="text-white font-bold text-sm">${(c.totalAmount || 0).toFixed(2)} €</div>
+                        <div class="text-[10px] font-mono text-slate-500 truncate">SHA-256: ${c.sha256Hash || 'n/a'}</div>
+                        <div class="flex justify-end space-x-3 border-t border-slate-800/80 pt-2">
+                            ${c.status !== 'RESOLVED' ? `
+                                <button onclick="markCaseResolved('${c.id}')" class="inline-flex items-center space-x-1 text-emerald-400 hover:text-emerald-300 transition-colors text-[11px]">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                    <span>Als korrigiert markieren</span>
+                                </button>
+                            ` : ''}
+                            <button onclick="reopenCaseObjection('${c.id}')" class="inline-flex items-center space-x-1 text-blue-400 hover:text-blue-300 transition-colors text-[11px]">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                                <span>Einwand erneut öffnen</span>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        window.renderCasesDossier = renderCasesDossier;
+
         function displayAuditResults(sourceName, date, practice, codes, totalClaimed, issues, matchedLog) {
             const resultCard = document.getElementById('result-status-card');
             const resultSection = document.getElementById('audit-result');
@@ -2661,7 +2902,7 @@
             }
         }
 
-        function openMailApp() {
+        async function openMailApp() {
             const email = document.getElementById('objection-email').value;
             const rawText = document.getElementById('objection-text').value;
 
@@ -2673,6 +2914,10 @@
             // some mail clients.
             const body = rawText.replace(/\r\n|\r|\n/g, '\r\n');
             const subject = 'Formeller Einwand Liquidation';
+
+            // Persist the payment-freeze case before handing off to the mail app — the tap
+            // itself is what "sends" the objection from the user's perspective.
+            await upsertCaseFromObjection();
 
             window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
         }
@@ -2691,6 +2936,10 @@
         async function shareObjectionPDF() {
             if (!lastAuditData) return;
             try {
+                // Persist the payment-freeze case before generating/sharing the PDF — the tap
+                // itself is what "sends" the objection from the user's perspective.
+                await upsertCaseFromObjection();
+
                 const doc = await buildObjectionPdfDoc();
                 if (!doc) return;
 
