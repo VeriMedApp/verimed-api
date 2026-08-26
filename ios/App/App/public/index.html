@@ -28,6 +28,9 @@
     
     <!-- PDF.js for Client-Side PDF Parsing & OCR Canvas Rendering -->
     <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+
+    <!-- jsPDF for generating genuine binary .pdf output (Einwand-Dossier share/print) -->
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
     <script>
         if (window.pdfjsLib) {
             pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -1737,26 +1740,325 @@
         }
         window.renderPDFPagesToDataURLs = renderPDFPagesToDataURLs;
 
-        // Builds the "Anlage / Beweisdokument" attachment section(s) for the Einwand PDF:
-        // one page per embedded image, each fit to A4 margins with aspect ratio preserved.
-        // Returns '' when no invoice was uploaded, so the fallback 1-page objection stays clean.
-        function buildInvoiceAttachmentHTML() {
-            if (!currentUploadedInvoice || !Array.isArray(currentUploadedInvoice.pages) || currentUploadedInvoice.pages.length === 0) {
-                return '';
+        // Fetches and caches the ProofMed logo as a data URL, for embedding into the
+        // generated PDF header (a relative <img src> won't resolve inside a detached
+        // print/share context, so the PDF needs the image data inline).
+        let cachedLogoDataUrl = null;
+        async function getLogoDataUrl() {
+            if (cachedLogoDataUrl !== null) return cachedLogoDataUrl;
+            try {
+                const resp = await fetch('branding/logo.png');
+                if (!resp.ok) throw new Error('logo fetch failed: ' + resp.status);
+                const blob = await resp.blob();
+                cachedLogoDataUrl = await fileToDataURL(blob);
+            } catch (e) {
+                console.warn('ProofMed logo load failed (non-fatal, PDF renders without it):', e);
+                cachedLogoDataUrl = '';
             }
-            const safeName = String(currentUploadedInvoice.name || 'Beleg').replace(/[<>&]/g, '');
-            const pages = currentUploadedInvoice.pages;
-            return pages.map((pageDataUrl, idx) => `
-                <div style="page-break-before: always;">
-                    <h2 style="font-size:14pt; color:#0f172a; border-bottom:2px solid #2563eb; padding-bottom:8px;">Anlage: Originalbeleg / Eingereichte Liquidation (Dateiname: ${safeName})</h2>
-                    ${pages.length > 1 ? `<p style="font-size:9pt; color:#64748b;">Seite ${idx + 1} von ${pages.length}</p>` : ''}
-                    <div style="width:100%; text-align:center; margin-top:16px;">
-                        <img src="${pageDataUrl}" style="max-width:100%; max-height:250mm; object-fit:contain; border:1px solid #cbd5e1; border-radius:4px;">
-                    </div>
-                </div>
-            `).join('');
+            return cachedLogoDataUrl;
         }
-        window.buildInvoiceAttachmentHTML = buildInvoiceAttachmentHTML;
+        window.getLogoDataUrl = getLogoDataUrl;
+
+        // Resolves the natural pixel dimensions of a data-URL image, needed to fit an
+        // embedded attachment page to the PDF page margins while preserving aspect ratio.
+        function loadImageDimensions(dataUrl) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => resolve({ width: img.naturalWidth || 1, height: img.naturalHeight || 1 });
+                img.onerror = () => resolve({ width: 1, height: 1 });
+                img.src = dataUrl;
+            });
+        }
+
+        // ProofMed brand palette for the generated PDF (mirrors the in-app dark-theme accents).
+        const PDF_COLORS = {
+            brandDark: [15, 23, 42],       // slate-900
+            textBody: [30, 41, 59],        // slate-800
+            textMuted: [100, 116, 139],    // slate-500
+            error: [225, 29, 72],          // rose-600 (freeze banner fill)
+            errorText: [136, 19, 55],      // rose-900 (issue box text)
+            errorBg: [255, 228, 230],      // rose-100
+            errorBorder: [244, 63, 94],    // rose-500
+            warnText: [120, 53, 15],       // amber-900
+            warnBg: [255, 251, 235],       // amber-50
+            warnBorder: [245, 158, 11],    // amber-500
+            successText: [6, 95, 70],      // emerald-800
+            successBg: [236, 253, 245],    // emerald-50
+            successBorder: [52, 211, 153], // emerald-400
+            chipBg: [241, 245, 249],       // slate-100
+            chipBorder: [203, 213, 225],   // slate-300
+            chipText: [51, 65, 85],        // slate-700
+        };
+
+        function buildObjectionFilename(practice, date) {
+            const slug = String(practice || 'Praxis').replace(/[^a-zA-Z0-9äöüÄÖÜß]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'Praxis';
+            return `Einwand_${slug}_${date}.pdf`;
+        }
+
+        /**
+         * Builds the branded, print-ready Einwand PDF as a real jsPDF document (not HTML):
+         * - Page 1: ProofMed logo header, title, meta, payment-freeze banner (if applicable),
+         *   color-coded issue boxes (red accent = ERROR, amber = WARN), a Geofence proof box
+         *   with a monospace SHA-256 hash chip, the objection letter text, and a document
+         *   integrity hash stamp.
+         * - Page 2+: one page per attached invoice image/PDF page, each headed "Anlage:
+         *   Originalbeleg / Eingereichte Liquidation", image fit to margins preserving aspect
+         *   ratio. Omitted entirely when no invoice was uploaded.
+         * Shared by shareObjectionPDF() and printObjectionPDF() so both buttons produce
+         * byte-identical, genuine PDF output instead of an HTML file dressed up for printing.
+         */
+        async function buildObjectionPdfDoc() {
+            if (!lastAuditData) return null;
+            if (!window.jspdf || !window.jspdf.jsPDF) {
+                showToast("PDF-Bibliothek nicht verfügbar (bitte Internetverbindung prüfen)", true);
+                return null;
+            }
+
+            const { practice, date, codes, totalClaimed, issues, matchedLog, objectionBody } = lastAuditData;
+
+            // Tamper-proof integrity stamp, covering the objection content itself
+            // (independent of the geofence proof hash, so it exists even without a matched log).
+            const documentHash = await generateSHA256(JSON.stringify({
+                practice, date, totalClaimed, codes,
+                issues: issues.map(i => i.msg),
+                objectionBody,
+                invoice: currentUploadedInvoice ? currentUploadedInvoice.name : null
+            }));
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+            const pageW = doc.internal.pageSize.getWidth();
+            const pageH = doc.internal.pageSize.getHeight();
+            const marginX = 18;
+            const contentW = pageW - marginX * 2;
+            let y = 16;
+
+            const ensureSpace = (needed) => {
+                if (y + needed > pageH - 16) {
+                    doc.addPage();
+                    y = 18;
+                }
+            };
+
+            // --- Header: logo + "ProofMed | Pre-Payment Audit System" ---
+            const logoDataUrl = await getLogoDataUrl();
+            let headerTextX = marginX;
+            if (logoDataUrl) {
+                try {
+                    doc.addImage(logoDataUrl, 'PNG', marginX, y - 3, 12, 12);
+                    headerTextX = marginX + 16;
+                } catch (e) { /* non-fatal: header text still renders without the logo */ }
+            }
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(15);
+            doc.setTextColor(...PDF_COLORS.brandDark);
+            doc.text('ProofMed', headerTextX, y + 4);
+            const proofMedWidth = doc.getTextWidth('ProofMed');
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(10.5);
+            doc.setTextColor(...PDF_COLORS.textMuted);
+            doc.text('|  Pre-Payment Audit System', headerTextX + proofMedWidth + 2, y + 4);
+            y += 14;
+            doc.setDrawColor(...PDF_COLORS.chipBorder);
+            doc.setLineWidth(0.4);
+            doc.line(marginX, y, pageW - marginX, y);
+            y += 9;
+
+            // --- Title ---
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(16.5);
+            doc.setTextColor(...PDF_COLORS.brandDark);
+            const titleLines = doc.splitTextToSize('Formeller Einwand gegen Medizinische Liquidation', contentW);
+            doc.text(titleLines, marginX, y);
+            y += titleLines.length * 6.5 + 3;
+
+            // --- Meta info ---
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(10.5);
+            doc.setTextColor(...PDF_COLORS.textBody);
+            [`Praxis / Arzt: ${practice}`, `Behandlungsdatum: ${date}`, `GOÄ-Ziffern: ${codes.join(', ')}`].forEach(line => {
+                doc.text(line, marginX, y);
+                y += 5.5;
+            });
+            doc.setFont('helvetica', 'bold');
+            doc.text(`Gesamtbetrag: ${totalClaimed.toFixed(2)} €`, marginX, y);
+            y += 9;
+
+            // --- Payment-freeze banner (clear red accent for blocking errors/warnings) ---
+            const hasError = issues.some(i => i.severity === 'ERROR');
+            const hasWarn = issues.some(i => i.severity === 'WARN');
+            if (hasError || hasWarn) {
+                ensureSpace(15);
+                doc.setFillColor(...PDF_COLORS.error);
+                doc.roundedRect(marginX, y, contentW, 12, 2, 2, 'F');
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(10.5);
+                doc.setTextColor(255, 255, 255);
+                doc.text('ZAHLUNG GESTOPPT — Warten auf korrigierte Liquidation (Frist eingefroren)', pageW / 2, y + 7.5, { align: 'center' });
+                y += 18;
+            }
+
+            // --- Issues list: red accent bar for ERROR, amber for WARN ---
+            ensureSpace(10);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(12);
+            doc.setTextColor(...PDF_COLORS.brandDark);
+            doc.text('Festgestellte Abrechnungsfehler', marginX, y);
+            y += 7;
+
+            issues.forEach(issue => {
+                const isError = issue.severity === 'ERROR';
+                const bg = isError ? PDF_COLORS.errorBg : PDF_COLORS.warnBg;
+                const accent = isError ? PDF_COLORS.errorBorder : PDF_COLORS.warnBorder;
+                const textColor = isError ? PDF_COLORS.errorText : PDF_COLORS.warnText;
+
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(9.5);
+                const wrapped = doc.splitTextToSize(`[${issue.severity}] ${issue.msg}`, contentW - 10);
+                const boxH = wrapped.length * 4.6 + 5;
+                ensureSpace(boxH + 3);
+
+                doc.setFillColor(...bg);
+                doc.roundedRect(marginX, y, contentW, boxH, 1.5, 1.5, 'F');
+                doc.setFillColor(...accent);
+                doc.rect(marginX, y, 1.8, boxH, 'F');
+                doc.setTextColor(...textColor);
+                doc.text(wrapped, marginX + 5.5, y + 5);
+                y += boxH + 3;
+            });
+            y += 2;
+
+            // --- Geofence proof box with monospace SHA-256 hash chip ---
+            if (matchedLog) {
+                ensureSpace(28);
+                const boxH = 24;
+                doc.setFillColor(...PDF_COLORS.successBg);
+                doc.setDrawColor(...PDF_COLORS.successBorder);
+                doc.setLineWidth(0.3);
+                doc.roundedRect(marginX, y, contentW, boxH, 1.5, 1.5, 'FD');
+
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(10);
+                doc.setTextColor(...PDF_COLORS.successText);
+                doc.text('Verifizierter Geofence-Nachweis', marginX + 4, y + 6);
+
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(9.5);
+                doc.setTextColor(...PDF_COLORS.textBody);
+                doc.text(`Anwesenheit am ${matchedLog.date} von ${matchedLog.arrival} bis ${matchedLog.departure} Uhr (${matchedLog.durationMin} Min.)`, marginX + 4, y + 11.5);
+
+                const chipY = y + 15;
+                doc.setFillColor(...PDF_COLORS.chipBg);
+                doc.setDrawColor(...PDF_COLORS.chipBorder);
+                doc.roundedRect(marginX + 4, chipY, contentW - 8, 6.5, 1, 1, 'FD');
+                doc.setFont('courier', 'normal');
+                doc.setFontSize(7);
+                doc.setTextColor(...PDF_COLORS.chipText);
+                doc.text(`SHA-256: ${matchedLog.proofHash}`, marginX + 6.5, chipY + 4.3);
+
+                y += boxH + 6;
+            } else {
+                ensureSpace(15);
+                doc.setFillColor(248, 250, 252);
+                doc.roundedRect(marginX, y, contentW, 10, 1.5, 1.5, 'F');
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(9);
+                doc.setTextColor(...PDF_COLORS.textMuted);
+                doc.text(`Kein Geofence-Tagebucheintrag für den ${date} gefunden.`, marginX + 4, y + 6.5);
+                y += 15;
+            }
+
+            // --- Objection letter text ---
+            ensureSpace(12);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(12);
+            doc.setTextColor(...PDF_COLORS.brandDark);
+            doc.text('Einwand-Text', marginX, y);
+            y += 7;
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9.5);
+            doc.setTextColor(...PDF_COLORS.textBody);
+            objectionBody.split('\n').forEach(para => {
+                if (para.trim() === '') { y += 3; return; }
+                const wrapped = doc.splitTextToSize(para, contentW);
+                ensureSpace(wrapped.length * 4.6 + 2);
+                doc.text(wrapped, marginX, y);
+                y += wrapped.length * 4.6 + 1;
+            });
+            y += 4;
+
+            // --- Document integrity hash stamp ---
+            ensureSpace(16);
+            doc.setDrawColor(...PDF_COLORS.chipBorder);
+            doc.setLineWidth(0.3);
+            doc.line(marginX, y, pageW - marginX, y);
+            y += 5;
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7.5);
+            doc.setTextColor(...PDF_COLORS.textMuted);
+            doc.text('Dokumenten-Integritätsstempel (SHA-256):', marginX, y);
+            y += 4;
+            doc.setFont('courier', 'normal');
+            doc.setFontSize(7);
+            doc.setTextColor(...PDF_COLORS.chipText);
+            doc.text(documentHash, marginX, y);
+            y += 6;
+            doc.setFont('helvetica', 'italic');
+            doc.setFontSize(7.5);
+            doc.setTextColor(...PDF_COLORS.textMuted);
+            doc.text('Erstellt mit ProofMed Pre-Payment Audit Assistant. 100% DSGVO-konform.', marginX, y);
+
+            // --- Attachment pages: one per uploaded invoice page, clean page-break before ---
+            if (currentUploadedInvoice && Array.isArray(currentUploadedInvoice.pages) && currentUploadedInvoice.pages.length > 0) {
+                const pages = currentUploadedInvoice.pages;
+                const safeName = String(currentUploadedInvoice.name || 'Beleg');
+                const detectFormat = (url) => (/^data:image\/png/i.test(url) ? 'PNG' : /^data:image\/webp/i.test(url) ? 'WEBP' : 'JPEG');
+
+                for (let idx = 0; idx < pages.length; idx++) {
+                    doc.addPage();
+                    let ay = 18;
+
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(12.5);
+                    doc.setTextColor(...PDF_COLORS.brandDark);
+                    const headerLines = doc.splitTextToSize(`Anlage: Originalbeleg / Eingereichte Liquidation (Dateiname: ${safeName})`, contentW);
+                    doc.text(headerLines, marginX, ay);
+                    ay += headerLines.length * 5.5 + 2;
+
+                    if (pages.length > 1) {
+                        doc.setFont('helvetica', 'normal');
+                        doc.setFontSize(8.5);
+                        doc.setTextColor(...PDF_COLORS.textMuted);
+                        doc.text(`Seite ${idx + 1} von ${pages.length}`, marginX, ay);
+                        ay += 6;
+                    }
+                    doc.setDrawColor(...PDF_COLORS.chipBorder);
+                    doc.line(marginX, ay, pageW - marginX, ay);
+                    ay += 6;
+
+                    try {
+                        const { width: imgW, height: imgH } = await loadImageDimensions(pages[idx]);
+                        const availW = contentW;
+                        const availH = pageH - ay - 16;
+                        const scale = Math.min(availW / imgW, availH / imgH);
+                        const drawW = imgW * scale;
+                        const drawH = imgH * scale;
+                        const drawX = marginX + (availW - drawW) / 2;
+                        doc.addImage(pages[idx], detectFormat(pages[idx]), drawX, ay, drawW, drawH);
+                    } catch (imgErr) {
+                        console.warn('Attachment page embed failed (non-fatal):', imgErr);
+                        doc.setFont('helvetica', 'italic');
+                        doc.setFontSize(9);
+                        doc.setTextColor(...PDF_COLORS.textMuted);
+                        doc.text('(Originalbeleg konnte nicht eingebettet werden)', marginX, ay + 10);
+                    }
+                }
+            }
+
+            return doc;
+        }
+        window.buildObjectionPdfDoc = buildObjectionPdfDoc;
 
         /**
          * Normalizes OCR text and fixes common digit typos:
@@ -2306,7 +2608,7 @@
             if (issues.length > 0) {
                 objectionCard?.classList.remove('hidden');
                 
-                const objectionBody = `Sehr geehrte Damen und Herren,\n\nbezüglich Ihrer Liquidation (${practice}, Datum: ${date}) lege ich hiermit formellen Einwand ein.\n\nFolgende Abweichungen wurden festgestellt:\n${issues.map(i => '- ' + i.msg).join('\n')}\n\n${matchedLog ? `Mein verifizierter Geofence-Anwesenheitsnachweis belegt eine tatsächliche Anwesenheit von ${matchedLog.durationMin} Min. (SHA-256 Audit Hash: ${matchedLog.proofHash}).\n\n` : ''}Ich bitte um Überprüfung und Übermittlung einer korrigierten Rechnung.\n\nMit freundlichen Grüßen,\nMax Mustermann`;
+                const objectionBody = `Sehr geehrte Damen und Herren,\n\nbezüglich Ihrer Liquidation (${practice}, Datum: ${date}) lege ich hiermit formellen Einwand ein.\n\nFolgende Abweichungen wurden festgestellt:\n${issues.map(i => '- ' + i.msg).join('\n')}\n\n${matchedLog ? `Verifizierter Geofence-Anwesenheitsnachweis:\n- Datum: ${matchedLog.date}\n- Anwesenheit: ${matchedLog.arrival} - ${matchedLog.departure} Uhr (${matchedLog.durationMin} Min.)\n- SHA-256 Audit Hash: ${matchedLog.proofHash}\n\n` : ''}Ich bitte um Überprüfung und Übermittlung einer korrigierten Rechnung.\n\nMit freundlichen Grüßen,\nMax Mustermann`;
                 
                 const objText = document.getElementById('objection-text');
                 const objEmail = document.getElementById('objection-email');
@@ -2362,13 +2664,17 @@
         function openMailApp() {
             const email = document.getElementById('objection-email').value;
             const rawText = document.getElementById('objection-text').value;
-            
-            // Format line breaks for proper email rendering: double line breaks for paragraph separation
-            const formattedBody = rawText
-                .replace(/\n\n/g, '%0D%0A%0D%0A')  // Preserve double line breaks (paragraphs)
-                .replace(/\n/g, '%0D%0A');          // Single line breaks
-            
-            window.location.href = `mailto:${email}?subject=Formeller%20Einwand%20Liquidation&body=${formattedBody}`;
+
+            // Normalize to CRLF (RFC 2822 email line-break convention), then run the ENTIRE
+            // subject/body through encodeURIComponent exactly once. Hand-rolling percent-escapes
+            // for only the newlines (as before) left &, %, umlauts etc. unescaped, which can
+            // truncate the mailto URL at the first stray "&" or corrupt it outright — leaving
+            // the paragraphs, bullet points, and Geofence proof block as one garbled line in
+            // some mail clients.
+            const body = rawText.replace(/\r\n|\r|\n/g, '\r\n');
+            const subject = 'Formeller Einwand Liquidation';
+
+            window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
         }
 
         function copyObjectionText() {
@@ -2384,195 +2690,64 @@
 
         async function shareObjectionPDF() {
             if (!lastAuditData) return;
+            try {
+                const doc = await buildObjectionPdfDoc();
+                if (!doc) return;
 
-            const { practice, date, codes, totalClaimed, issues, matchedLog, objectionBody } = lastAuditData;
+                const filename = buildObjectionFilename(lastAuditData.practice, lastAuditData.date);
+                const pdfBlob = doc.output('blob');
 
-            // Tamper-proof integrity stamp for page 1, covering the objection content itself
-            // (independent of the geofence proof hash, so it exists even without a matched log).
-            const documentHash = await generateSHA256(JSON.stringify({
-                practice, date, totalClaimed, codes,
-                issues: issues.map(i => i.msg),
-                objectionBody,
-                invoice: currentUploadedInvoice ? currentUploadedInvoice.name : null
-            }));
-
-            // Generate HTML content for the PDF
-            const htmlContent = `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <style>
-                        body { font-family: Arial, sans-serif; padding: 40px; line-height: 1.6; }
-                        h1 { color: #0052d4; border-bottom: 3px solid #00c6ff; padding-bottom: 10px; }
-                        h2 { color: #6e0dd0; margin-top: 30px; }
-                        .header { text-align: center; margin-bottom: 40px; }
-                        .logo { font-size: 24px; font-weight: bold; color: #0052d4; }
-                        .issue { background: #fff3cd; border-left: 4px solid #ff6b6b; padding: 10px; margin: 10px 0; }
-                        .error { border-left-color: #dc3545; background: #ffe5e5; }
-                        .warn { border-left-color: #ffc107; background: #fff3cd; }
-                        .geofence { background: #d4edda; border: 1px solid #c3e6cb; padding: 15px; margin: 20px 0; }
-                        .hash { font-family: monospace; font-size: 10px; word-break: break-all; color: #666; }
-                        .freeze-badge { background: #dc3545; color: white; padding: 15px; text-align: center; font-weight: bold; margin: 20px 0; border-radius: 5px; }
-                        .footer { margin-top: 30px; font-size: 9px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px; }
-                    </style>
-                </head>
-                <body>
-                    <div class="header">
-                        <div class="logo">ProofMed</div>
-                        <p>Pre-Payment Audit System</p>
-                    </div>
-
-                    <h1>Formeller Einwand zur Liquidation</h1>
-
-                    <p><strong>Praxis:</strong> ${practice}</p>
-                    <p><strong>Datum:</strong> ${date}</p>
-                    <p><strong>Gesamtbetrag:</strong> ${totalClaimed.toFixed(2)} €</p>
-                    <p><strong>GOÄ-Ziffern:</strong> ${codes.join(', ')}</p>
-
-                    ${(issues.some(i => i.severity === 'ERROR') || issues.some(i => i.severity === 'WARN')) ?
-                        '<div class="freeze-badge">⛔ ZAHLUNG GESTOPPT – Warten auf korrigierte Liquidation (Frist eingefroren)</div>' : ''}
-
-                    <h2>Festgestellte Abweichungen</h2>
-                    ${issues.map(i => `
-                        <div class="issue ${i.severity === 'ERROR' ? 'error' : 'warn'}">
-                            <strong>[${i.severity}]</strong> ${i.msg}
-                        </div>
-                    `).join('')}
-
-                    ${matchedLog ? `
-                        <div class="geofence">
-                            <h3>Verifizierter Geofence-Anwesenheitsnachweis</h3>
-                            <p><strong>Datum:</strong> ${matchedLog.date}</p>
-                            <p><strong>Anwesenheit:</strong> ${matchedLog.arrival} - ${matchedLog.departure} Uhr (${matchedLog.durationMin} Min.)</p>
-                            <p><strong>Praxis:</strong> ${matchedLog.practice}</p>
-                            <p class="hash"><strong>SHA-256 Audit Hash:</strong><br>${matchedLog.proofHash}</p>
-                        </div>
-                    ` : ''}
-
-                    <h2>Einwand-Text</h2>
-                    <pre style="white-space: pre-wrap; background: #f5f5f5; padding: 15px; border-radius: 5px;">${objectionBody}</pre>
-
-                    <div class="footer">
-                        Dokumenten-Integritätsstempel (SHA-256): <span class="hash">${documentHash}</span>
-                    </div>
-
-                    ${buildInvoiceAttachmentHTML()}
-                </body>
-                </html>
-            `;
-
-            // Try Native Share API (iOS/Android)
-            if (navigator.share) {
-                try {
-                    // Create a blob from HTML content
-                    const blob = new Blob([htmlContent], { type: 'text/html' });
-                    const file = new File([blob], `Einwand_${practice}_${date}.html`, { type: 'text/html' });
-                    
-                    await navigator.share({
-                        title: 'Einwand Liquidation',
-                        text: 'Formeller Einwand zur Privatrechnung',
-                        files: [file]
-                    });
-                    
-                    showToast("Einwand erfolgreich geteilt!");
-                } catch (error) {
-                    if (error.name !== 'AbortError') {
-                        console.error('Share failed:', error);
-                        fallbackPDFDownload(htmlContent, practice, date);
+                // Try the native Share Sheet (iOS/Android) with a genuine application/pdf file.
+                if (navigator.canShare) {
+                    try {
+                        const file = new File([pdfBlob], filename, { type: 'application/pdf' });
+                        if (navigator.canShare({ files: [file] })) {
+                            await navigator.share({
+                                title: 'Einwand Liquidation',
+                                text: 'Formeller Einwand zur Privatrechnung',
+                                files: [file]
+                            });
+                            showToast("Einwand-PDF erfolgreich geteilt!");
+                            return;
+                        }
+                    } catch (shareErr) {
+                        if (shareErr.name === 'AbortError') return;
+                        console.warn("Native file share failed, falling back to download:", shareErr);
                     }
                 }
-            } else {
-                // Fallback: Open in new window for print/save
-                fallbackPDFDownload(htmlContent, practice, date);
-            }
-        }
 
-        function fallbackPDFDownload(htmlContent, practice, date) {
-            const printWindow = window.open('', '', 'width=800,height=600');
-            printWindow.document.write(htmlContent);
-            printWindow.document.close();
-            
-            setTimeout(() => {
-                printWindow.focus();
-                printWindow.print();
-            }, 500);
-            
-            showToast("Bitte als PDF speichern oder drucken");
+                // Fallback: trigger a genuine .pdf download directly (no HTML/print-dialog detour)
+                doc.save(filename);
+                showToast("Einwand-PDF heruntergeladen!");
+            } catch (err) {
+                console.error("shareObjectionPDF error:", err);
+                showToast("Fehler beim PDF-Export: " + (err.message || err), true);
+            }
         }
 
         async function printObjectionPDF() {
             if (!lastAuditData) return;
+            try {
+                const doc = await buildObjectionPdfDoc();
+                if (!doc) return;
 
-            // Tamper-proof integrity stamp for page 1 (see shareObjectionPDF for rationale).
-            const documentHash = await generateSHA256(JSON.stringify({
-                practice: lastAuditData.practice,
-                date: lastAuditData.date,
-                totalClaimed: lastAuditData.totalClaimed,
-                issues: lastAuditData.issues.map(i => i.msg),
-                objectionBody: lastAuditData.objectionBody,
-                invoice: currentUploadedInvoice ? currentUploadedInvoice.name : null
-            }));
+                // Embeds a print command in the PDF itself so a capable viewer opens the print
+                // dialog automatically — the standard jsPDF idiom for a native print/export flow
+                // that still hands the user a genuine .pdf file (via the OS/browser "Save as PDF").
+                doc.autoPrint();
+                const blobUrl = doc.output('bloburl');
+                const printWindow = window.open(blobUrl, '_blank');
 
-            const iframe = document.createElement('iframe');
-            iframe.style.position = 'fixed';
-            iframe.style.right = '0';
-            iframe.style.bottom = '0';
-            iframe.style.width = '0';
-            iframe.style.height = '0';
-            iframe.style.border = '0';
-            document.body.appendChild(iframe);
-
-            const doc = iframe.contentWindow.document;
-            doc.open();
-            doc.write(`
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>Formeller Einwand – ProofMed Audit</title>
-                    <style>
-                        body { font-family: sans-serif; padding: 40px; font-size: 12pt; line-height: 1.5; color: #1e293b; }
-                        h1 { font-size: 16pt; color: #0f172a; border-bottom: 2px solid #2563eb; padding-bottom: 8px; }
-                        .proof-box { background: #f0fdf4; border: 1px solid #16a34a; padding: 15px; border-radius: 8px; margin: 20px 0; font-size: 10pt; }
-                        .issue-box { background: #fff1f2; border: 1px solid #e11d48; padding: 12px; border-radius: 8px; margin-bottom: 10px; font-size: 10pt; }
-                        .footer { margin-top: 40px; font-size: 9pt; color: #64748b; border-top: 1px solid #cbd5e1; padding-top: 10px; }
-                    </style>
-                </head>
-                <body>
-                    <h1>Formeller Einwand gegen Medizinische Liquidation</h1>
-                    <p><strong>Praxis / Arzt:</strong> ${lastAuditData.practice}<br>
-                    <strong>Behandlungsdatum:</strong> ${lastAuditData.date}<br>
-                    <strong>Gesamtbetrag:</strong> ${lastAuditData.totalClaimed.toFixed(2)} €</p>
-
-                    ${lastAuditData.matchedLog ? `
-                        <div class="proof-box">
-                            <strong>ProofMed Geofencing-Audit-Nachweis:</strong><br>
-                            Anwesenheitszeitfenster: ${lastAuditData.matchedLog.arrival} bis ${lastAuditData.matchedLog.departure} Uhr (${lastAuditData.matchedLog.durationMin} Min.)<br>
-                            Integritäts-Hash (SHA-256): ${lastAuditData.matchedLog.proofHash}
-                        </div>
-                    ` : ''}
-
-                    <h3>Festgestellte Abrechnungsfehler:</h3>
-                    ${lastAuditData.issues.map(i => `<div class="issue-box">${i.msg}</div>`).join('')}
-
-                    <p style="white-space: pre-wrap; margin-top: 20px;">${lastAuditData.objectionBody}</p>
-
-                    <div class="footer">
-                        Erstellt mit ProofMed Pre-Payment Audit Assistant. 100% DSGVO-konform.<br>
-                        Dokumenten-Integritätsstempel (SHA-256): <span style="font-family: monospace; word-break: break-all;">${documentHash}</span>
-                    </div>
-
-                    ${buildInvoiceAttachmentHTML()}
-                </body>
-                </html>
-            `);
-            doc.close();
-
-            setTimeout(() => {
-                iframe.contentWindow.focus();
-                iframe.contentWindow.print();
-                setTimeout(() => iframe.remove(), 1000);
-            }, 300);
+                if (!printWindow) {
+                    // Popup blocked, or the WebView doesn't support opening blob: URLs in a new
+                    // tab: fall back to a direct download so the user still gets a real PDF.
+                    doc.save(buildObjectionFilename(lastAuditData.practice, lastAuditData.date));
+                    showToast("Popup blockiert – PDF wurde stattdessen heruntergeladen.");
+                }
+            } catch (err) {
+                console.error("printObjectionPDF error:", err);
+                showToast("Fehler beim PDF-Druck: " + (err.message || err), true);
+            }
         }
 
         async function exportDossierCSV() {
@@ -2704,7 +2879,6 @@
         window.openMailApp = openMailApp;
         window.copyObjectionText = copyObjectionText;
         window.shareObjectionPDF = shareObjectionPDF;
-        window.fallbackPDFDownload = fallbackPDFDownload;
         window.printObjectionPDF = printObjectionPDF;
         window.exportDossierCSV = exportDossierCSV;
         window.printDossierPDF = printDossierPDF;
