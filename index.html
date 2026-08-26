@@ -114,13 +114,19 @@
                 </div>
             </div>
 
-            <!-- DSGVO Trust Badge -->
-            <div onclick="openPrivacyModal()" class="flex items-center space-x-2 bg-emerald-950/70 border border-emerald-500/30 px-3 py-1.5 rounded-full shadow-inner hover:bg-emerald-900/50 transition-all cursor-pointer">
-                <span class="relative flex h-2 w-2">
-                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                <span class="text-xs font-medium text-emerald-300">100% DSGVO-konform & Lokal</span>
+            <div class="flex items-center space-x-2">
+                <!-- DSGVO Trust Badge -->
+                <div onclick="openPrivacyModal()" class="flex items-center space-x-2 bg-emerald-950/70 border border-emerald-500/30 px-3 py-1.5 rounded-full shadow-inner hover:bg-emerald-900/50 transition-all cursor-pointer">
+                    <span class="relative flex h-2 w-2">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <span class="text-xs font-medium text-emerald-300 hidden sm:inline">100% DSGVO-konform & Lokal</span>
+                </div>
+                <!-- Patient Profile / Settings -->
+                <button onclick="openProfileModal()" title="Patientenprofil" class="p-2 rounded-full bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:border-blue-500/50 transition-all">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                </button>
             </div>
         </div>
     </header>
@@ -145,6 +151,15 @@
 
         <!-- TAB 1: AUDIT & SCAN -->
         <section id="tab-scan" class="space-y-6">
+            <!-- Non-intrusive profile setup reminder (hidden once a profile is configured) -->
+            <div id="profile-setup-banner" class="hidden glass-card p-3.5 rounded-xl border border-blue-500/30 bg-blue-950/20 flex items-center justify-between gap-3">
+                <div class="flex items-center space-x-2.5 text-xs text-blue-200">
+                    <svg class="w-4 h-4 text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                    <span>Profil noch nicht eingerichtet – Name & Anschrift für Einwand-Schreiben hinterlegen.</span>
+                </div>
+                <button onclick="openProfileModal()" class="shrink-0 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-[11px] px-3 py-1.5 rounded-lg transition-all">Jetzt einrichten</button>
+            </div>
+
             <!-- Dropzone Card -->
             <div class="glass-card glass-card-hover rounded-2xl p-6 text-center border-2 border-dashed border-slate-700 hover:border-blue-500/50 transition-all">
                 <div class="w-14 h-14 bg-blue-500/10 text-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-inner">
@@ -414,6 +429,10 @@
 
         <!-- TAB 3: DOSSIER -->
         <section id="tab-dossier" class="hidden space-y-4">
+            <div class="grid grid-cols-3 gap-2 hidden" id="dossier-summary-bar">
+                <!-- Dynamically populated by renderDossierSummary(): Gesamtbetrag / Reguliert / Ersparnis -->
+            </div>
+
             <div class="glass-card p-5 rounded-2xl space-y-4">
                 <div class="flex items-center justify-between border-b border-slate-800 pb-3">
                     <h3 class="text-sm font-bold text-white flex items-center space-x-2">
@@ -433,9 +452,10 @@
                         <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                         <span>Jahres-Dossier & Beihilfe Export</span>
                     </h3>
-                    <select id="dossier-year-select" class="bg-slate-900 border border-slate-700 text-white text-xs rounded-lg px-2.5 py-1 font-medium">
+                    <select id="dossier-year-select" onchange="renderCasesDossier()" class="bg-slate-900 border border-slate-700 text-white text-xs rounded-lg px-2.5 py-1 font-medium">
                         <option value="2026" selected>Jahr 2026</option>
                         <option value="2025">Jahr 2025</option>
+                        <option value="all">Alle Jahre</option>
                     </select>
                 </div>
                 <p class="text-xs text-slate-400 leading-relaxed">Exportiere deine gesammelten Praxisbesuche und Rechnungsprüfungen als strukturiertes Dossier für die Beihilfestelle, Krankenversicherung oder Steuererklärung (Außergewöhnliche Belastungen).</p>
@@ -470,6 +490,49 @@
                 <p>Es erfolgt keine Speicherung deiner Bewegungsprofile oder medizinischen Daten auf externen Cloud-Servern.</p>
             </div>
             <button onclick="closePrivacyModal()" class="w-full bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs py-2.5 rounded-xl border border-slate-700">Verstanden</button>
+        </div>
+    </div>
+
+    <!-- Patient Profile Modal -->
+    <div id="profile-modal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="glass-card max-w-md w-full p-6 rounded-2xl border border-slate-800 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                    <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                    <span>Patientenprofil & lokaler Tresor</span>
+                </h3>
+                <button onclick="closeProfileModal()" class="text-slate-400 hover:text-white font-bold text-sm">✕</button>
+            </div>
+            <p class="text-[11px] text-slate-400 leading-relaxed">Diese Angaben werden automatisch in Einwand-Schreiben, E-Mails und das Jahres-Dossier übernommen. Alles bleibt ausschließlich lokal gespeichert.</p>
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block text-slate-400 text-[11px] mb-1 font-medium">Vollständiger Name</label>
+                    <input type="text" id="profile-fullname" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500" placeholder="Max Mustermann">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-[11px] mb-1 font-medium">Anschrift</label>
+                    <textarea id="profile-address" rows="2" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500" placeholder="Musterstraße 1, 12345 Musterstadt"></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-slate-400 text-[11px] mb-1 font-medium">Krankenversicherung</label>
+                        <input type="text" id="profile-insurance-name" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500" placeholder="z.B. Debeka PKV">
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 text-[11px] mb-1 font-medium">Versichertennummer</label>
+                        <input type="text" id="profile-insurance-number" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-[11px] mb-1 font-medium">Beihilfe-Nummer (optional)</label>
+                    <input type="text" id="profile-beihilfe-number" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-[11px] mb-1 font-medium">Tresor-PIN (optional, 4-6 Ziffern)</label>
+                    <input type="password" inputmode="numeric" maxlength="6" id="profile-vault-pin" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+                </div>
+            </div>
+            <button onclick="saveProfile()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs py-2.5 rounded-xl shadow transition-all">Profil speichern</button>
         </div>
     </div>
 
@@ -579,6 +642,60 @@
         };
         var openPrivacyModal = window.openPrivacyModal;
         var closePrivacyModal = window.closePrivacyModal;
+
+        /* PATIENT PROFILE (Name/Anschrift/Versicherung) — local-only vault, used to
+           auto-populate Einwand letters, emails, and the Dossier letterhead. */
+        async function openProfileModal() {
+            try {
+                const profile = await ProofMedStorage.getProfile();
+                const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+                setVal('profile-fullname', profile.fullName);
+                setVal('profile-address', profile.address);
+                setVal('profile-insurance-name', profile.insuranceName);
+                setVal('profile-insurance-number', profile.insuranceNumber);
+                setVal('profile-beihilfe-number', profile.beihilfeNumber);
+                setVal('profile-vault-pin', profile.vaultPin);
+                document.getElementById('profile-modal')?.classList.remove('hidden');
+            } catch (e) {
+                console.error("openProfileModal error:", e);
+            }
+        }
+        function closeProfileModal() {
+            document.getElementById('profile-modal')?.classList.add('hidden');
+        }
+        async function saveProfile() {
+            try {
+                const getVal = (id) => (document.getElementById(id)?.value || '').trim();
+                const fullName = getVal('profile-fullname');
+                const address = getVal('profile-address');
+                const profile = {
+                    fullName,
+                    address,
+                    insuranceName: getVal('profile-insurance-name'),
+                    insuranceNumber: getVal('profile-insurance-number'),
+                    beihilfeNumber: getVal('profile-beihilfe-number'),
+                    vaultPin: getVal('profile-vault-pin'),
+                    isConfigured: !!(fullName && address),
+                };
+                await ProofMedStorage.setProfile(profile);
+                closeProfileModal();
+                await updateProfileBanner();
+                showToast("Profil gespeichert!");
+            } catch (e) {
+                console.error("saveProfile error:", e);
+                showToast("Fehler beim Speichern des Profils: " + (e.message || e), true);
+            }
+        }
+        async function updateProfileBanner() {
+            try {
+                const profile = await ProofMedStorage.getProfile();
+                document.getElementById('profile-setup-banner')?.classList.toggle('hidden', !!profile.isConfigured);
+            } catch (e) {}
+        }
+        window.openProfileModal = openProfileModal;
+        window.closeProfileModal = closeProfileModal;
+        window.saveProfile = saveProfile;
+        window.updateProfileBanner = updateProfileBanner;
 
         // MASTER GOÄ CATALOG (30 Codes & Surcharges)
         const GOA_CATALOG = {
@@ -1154,26 +1271,46 @@
             // Diary, and Dossier tabs. Stored the same way as diary logs: a single JSON
             // blob under its own key, via the existing SQLite/localStorage getItem/setItem.
             async getCases() {
+                let parsed = null;
                 try {
                     const raw = await this.getItem('proofmed_cases');
                     if (raw) {
-                        const parsed = JSON.parse(raw);
-                        if (Array.isArray(parsed)) return parsed;
+                        const p = JSON.parse(raw);
+                        if (Array.isArray(p)) parsed = p;
                     }
-                    return [];
                 } catch (e) {
                     console.warn("Fehler beim Laden/Parsen der Fälle, Fallback auf localStorage:", e);
                     try {
                         const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('proofmed_cases') : null;
                         if (raw) {
-                            const parsed = JSON.parse(raw);
-                            if (Array.isArray(parsed)) return parsed;
+                            const p = JSON.parse(raw);
+                            if (Array.isArray(p)) parsed = p;
                         }
-                        return [];
-                    } catch (err) {
-                        return [];
-                    }
+                    } catch (err) {}
                 }
+                if (!parsed) return [];
+
+                // Migrate legacy case records (pre-Corrected-Amount schema) in place: the
+                // original field was "totalAmount"; it's now "originalAmount" alongside the
+                // new correction-tracking fields. No data is dropped — legacy totalAmount is
+                // kept too, just also copied into originalAmount so old cases keep working.
+                let migrated = false;
+                parsed.forEach(c => {
+                    if (!c) return;
+                    if (c.originalAmount === undefined || c.originalAmount === null) {
+                        c.originalAmount = (typeof c.totalAmount === 'number') ? c.totalAmount : 0;
+                        migrated = true;
+                    }
+                    if (c.correctedAmount === undefined) { c.correctedAmount = null; migrated = true; }
+                    if (c.savedAmount === undefined) { c.savedAmount = null; migrated = true; }
+                    if (c.resolvedDate === undefined) { c.resolvedDate = null; migrated = true; }
+                    if (c.invoiceNumber === undefined) { c.invoiceNumber = null; migrated = true; }
+                    if (c.auditedCorrectionAmount === undefined) { c.auditedCorrectionAmount = null; migrated = true; }
+                });
+                if (migrated) {
+                    this.setItem('proofmed_cases', JSON.stringify(parsed)).catch(() => {});
+                }
+                return parsed;
             },
 
             async setCases(cases) {
@@ -1185,6 +1322,44 @@
                     try {
                         if (typeof localStorage !== 'undefined') {
                             localStorage.setItem('proofmed_cases', JSON.stringify(Array.isArray(cases) ? cases : []));
+                        }
+                    } catch (err) {}
+                }
+            },
+
+            // Patient profile — a single record, not an array, stored the same way.
+            async getProfile() {
+                const defaults = { fullName: '', address: '', insuranceName: '', insuranceNumber: '', beihilfeNumber: '', vaultPin: '', isConfigured: false };
+                try {
+                    const raw = await this.getItem('proofmed_profile');
+                    if (raw) {
+                        const parsed = JSON.parse(raw);
+                        if (parsed && typeof parsed === 'object') return { ...defaults, ...parsed };
+                    }
+                    return defaults;
+                } catch (e) {
+                    console.warn("Fehler beim Laden/Parsen des Profils, Fallback auf localStorage:", e);
+                    try {
+                        const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('proofmed_profile') : null;
+                        if (raw) {
+                            const parsed = JSON.parse(raw);
+                            if (parsed && typeof parsed === 'object') return { ...defaults, ...parsed };
+                        }
+                        return defaults;
+                    } catch (err) {
+                        return defaults;
+                    }
+                }
+            },
+
+            async setProfile(profile) {
+                try {
+                    await this.setItem('proofmed_profile', JSON.stringify(profile || {}));
+                } catch (e) {
+                    console.error("Fehler beim Speichern des Profils:", e);
+                    try {
+                        if (typeof localStorage !== 'undefined') {
+                            localStorage.setItem('proofmed_profile', JSON.stringify(profile || {}));
                         }
                     } catch (err) {}
                 }
@@ -1501,7 +1676,7 @@
                         </div>
                         ${linkedCase ? `
                             <button onclick="switchTab('dossier')" class="w-full text-left ${caseMeta.badgeClass} px-2.5 py-1.5 rounded-lg text-[10px] font-semibold border inline-flex items-center space-x-1.5">
-                                <span>${caseMeta.emoji}</span><span>Verknüpft: ${caseMeta.label} · ${linkedCase.doctorName}</span>
+                                <span>${caseMeta.emoji}</span><span>Verknüpft: ${linkedCase.status === 'RESOLVED' ? `Erledigt (Korr. ${(linkedCase.correctedAmount || 0).toFixed(2)} €)` : caseMeta.label} · ${linkedCase.doctorName}</span>
                             </button>
                         ` : ''}
                         <div class="text-[10px] font-mono text-slate-500 truncate">
@@ -1961,10 +2136,15 @@
             y += titleLines.length * 6.5 + 3;
 
             // --- Meta info ---
+            // Only display codes that are actual, known GOÄ catalog entries — the line
+            // parser's numeric fallback can occasionally pick up an unrelated 4-digit
+            // number (e.g. an invoice year like "2026" near a mis-normalized "Nr."/"Pos."
+            // label) that was never a real billing position.
+            const displayCodes = codes.filter(c => !!GOA_CATALOG[c]);
             doc.setFont('helvetica', 'normal');
             doc.setFontSize(10.5);
             doc.setTextColor(...PDF_COLORS.textBody);
-            [`Praxis / Arzt: ${practice}`, `Behandlungsdatum: ${date}`, `GOÄ-Ziffern: ${codes.join(', ')}`].forEach(line => {
+            [`Praxis / Arzt: ${practice}`, `Behandlungsdatum: ${date}`, `GOÄ-Ziffern: ${displayCodes.join(', ')}`].forEach(line => {
                 doc.text(line, marginX, y);
                 y += 5.5;
             });
@@ -2594,7 +2774,11 @@
                     ? extractedTotal
                     : computedTotal;
 
-                displayAuditResults(sourceName, date, practice, codes, totalClaimed, issues, matchedLog);
+                // computedTotal (sum of the audited GOÄ codes at their submitted factors) is
+                // kept as the suggested "corrected amount" default for later, when the user
+                // marks this case resolved — it's the amount ProofMed's own audit arrived at,
+                // as opposed to totalClaimed which may include extra invoice-level charges.
+                await displayAuditResults(sourceName, date, practice, codes, totalClaimed, issues, matchedLog, computedTotal);
             } catch (err) {
                 console.error("runAuditEngine error:", err);
                 showToast("Fehler bei der Prüf-Engine: " + (err.message || err), true);
@@ -2636,7 +2820,7 @@
         async function upsertCaseFromObjection() {
             if (!lastAuditData) return null;
             try {
-                const { practice, date, totalClaimed, matchedLog, issues, objectionBody } = lastAuditData;
+                const { practice, date, totalClaimed, matchedLog, issues, objectionBody, auditedTotal } = lastAuditData;
 
                 const sha256Hash = (matchedLog && matchedLog.proofHash) || await generateSHA256(JSON.stringify({
                     practice, date, totalClaimed,
@@ -2650,14 +2834,23 @@
 
                 const caseRecord = {
                     id: existing ? existing.id : generateEntryId('case_'),
+                    invoiceNumber: (existing && existing.invoiceNumber) || null,
                     invoiceDate: date,
                     doctorName: practice,
-                    totalAmount: totalClaimed,
+                    originalAmount: totalClaimed,
+                    // Re-sending an objection re-opens the case: any prior resolution is
+                    // cleared, since the case is active/frozen again.
+                    correctedAmount: null,
+                    savedAmount: null,
                     status: 'FROZEN',
                     objectionDate: new Date().toISOString().split('T')[0],
+                    resolvedDate: null,
                     sha256Hash,
                     diaryEntryId: (matchedLog && matchedLog.id) || (existing && existing.diaryEntryId) || null,
                     receiptDataUrl: (currentUploadedInvoice && currentUploadedInvoice.dataUrl) || (existing && existing.receiptDataUrl) || null,
+                    // The amount ProofMed's own audit computed from the submitted GOÄ codes —
+                    // used as the suggested default when later entering the corrected amount.
+                    auditedCorrectionAmount: (typeof auditedTotal === 'number' && !isNaN(auditedTotal)) ? auditedTotal : null,
                 };
 
                 if (existingIdx >= 0) {
@@ -2680,22 +2873,65 @@
         }
         window.upsertCaseFromObjection = upsertCaseFromObjection;
 
+        // "Als korrigiert markieren": confirms the actual corrected invoice amount (or
+        // when uploading a corrected invoice, the OCR-extracted total can be entered here
+        // too), computes the realized savings, and closes the case.
         async function markCaseResolved(caseId) {
             try {
                 const cases = await ProofMedStorage.getCases();
                 const idx = cases.findIndex(c => c.id === caseId);
                 if (idx === -1) return;
-                cases[idx].status = 'RESOLVED';
+                const c = cases[idx];
+
+                const suggested = (typeof c.auditedCorrectionAmount === 'number' && !isNaN(c.auditedCorrectionAmount))
+                    ? c.auditedCorrectionAmount
+                    : c.originalAmount;
+
+                const input = prompt(
+                    `Tatsächlich korrigierter Rechnungsbetrag für ${c.doctorName} (${c.invoiceDate}):\nUrsprünglich berechnet: ${(c.originalAmount || 0).toFixed(2)} €`,
+                    (suggested || 0).toFixed(2)
+                );
+                if (input === null) return; // cancelled
+
+                const correctedAmount = parseFloat(String(input).replace(',', '.'));
+                if (isNaN(correctedAmount) || correctedAmount < 0) {
+                    showToast("Ungültiger Betrag – Fall wurde nicht aktualisiert.", true);
+                    return;
+                }
+
+                const savedAmount = Math.max(0, (c.originalAmount || 0) - correctedAmount);
+
+                cases[idx] = {
+                    ...c,
+                    correctedAmount,
+                    savedAmount,
+                    status: 'RESOLVED',
+                    resolvedDate: new Date().toISOString().split('T')[0],
+                };
+
                 await ProofMedStorage.setCases(cases);
                 await renderCasesDossier();
                 await renderDiaryLogs();
-                showToast("Fall als korrigiert markiert!");
+                showToast(`Fall als korrigiert markiert! Ersparnis: ${savedAmount.toFixed(2)} €`);
             } catch (e) {
                 console.error("markCaseResolved error:", e);
                 showToast("Fehler beim Aktualisieren des Falls: " + (e.message || e), true);
             }
         }
         window.markCaseResolved = markCaseResolved;
+
+        // Splits text into non-empty lines and rejoins with a double CRLF between every
+        // one — paragraphs AND list items alike — so webmail providers (WEB.DE, GMX,
+        // Gmail) that flatten single line breaks when converting a mailto body to HTML
+        // still render each line as its own visually distinct block.
+        function toDoubleCrlfBody(text) {
+            return String(text)
+                .split(/\r\n|\r|\n/)
+                .map(l => l.trim())
+                .filter(l => l.length > 0)
+                .join('\r\n\r\n');
+        }
+        window.toDoubleCrlfBody = toDoubleCrlfBody;
 
         // "Einwand erneut öffnen": drafts a follow-up reminder email referencing the
         // stored case (the original issues/objection text aren't part of the persisted
@@ -2708,10 +2944,9 @@
                 if (!c) return;
 
                 const email = derivePracticeEmail(c.doctorName);
-                const body = `Sehr geehrte Damen und Herren,\n\nich verweise erneut auf meinen formellen Einwand vom ${c.objectionDate} bezüglich der Liquidation vom ${c.invoiceDate} (${c.doctorName}, Gesamtbetrag: ${c.totalAmount.toFixed(2)} €).\n\nBislang liegt mir keine korrigierte Rechnung vor. Ich bitte um zeitnahe Bearbeitung, da die Zahlung bis dahin eingefroren bleibt.\n\nDokumenten-Referenz (SHA-256): ${c.sha256Hash || 'n/a'}\n\nMit freundlichen Grüßen`;
-                const crlfBody = body.replace(/\r\n|\r|\n/g, '\r\n');
+                const body = `Sehr geehrte Damen und Herren,\n\nich verweise erneut auf meinen formellen Einwand vom ${c.objectionDate} bezüglich der Liquidation vom ${c.invoiceDate} (${c.doctorName}, Gesamtbetrag: ${(c.originalAmount || 0).toFixed(2)} €).\n\nBislang liegt mir keine korrigierte Rechnung vor. Ich bitte um zeitnahe Bearbeitung, da die Zahlung bis dahin eingefroren bleibt.\n\nDokumenten-Referenz (SHA-256): ${c.sha256Hash || 'n/a'}\n\nMit freundlichen Grüßen`;
 
-                window.location.href = `mailto:${email}?subject=${encodeURIComponent('Erinnerung: Formeller Einwand vom ' + c.objectionDate)}&body=${encodeURIComponent(crlfBody)}`;
+                window.location.href = `mailto:${email}?subject=${encodeURIComponent('Erinnerung: Formeller Einwand vom ' + c.objectionDate)}&body=${encodeURIComponent(toDoubleCrlfBody(body))}`;
                 showToast("Erinnerungs-E-Mail wird geöffnet...");
             } catch (e) {
                 console.error("reopenCaseObjection error:", e);
@@ -2720,11 +2955,64 @@
         }
         window.reopenCaseObjection = reopenCaseObjection;
 
+        // Aggregates the KPI figures for the Dossier tab / PDF export: total originally
+        // billed, what was actually settled after corrections, and the realized savings.
+        // Savings only ever reflects RESOLVED cases — a FROZEN/WAITING_CORRECTION case's
+        // original amount counts toward both sums equally, so it nets to zero savings
+        // until it's actually resolved (no speculative "expected" savings are counted).
+        function computeDossierSummary(cases, year) {
+            const inYear = (year && year !== 'all') ? cases.filter(c => String(c.invoiceDate || '').startsWith(String(year))) : cases;
+            let originalSum = 0, settledSum = 0, savingsSum = 0;
+            inYear.forEach(c => {
+                const original = c.originalAmount || 0;
+                originalSum += original;
+                if (c.status === 'RESOLVED') {
+                    const corrected = (typeof c.correctedAmount === 'number' && !isNaN(c.correctedAmount)) ? c.correctedAmount : original;
+                    settledSum += corrected;
+                    savingsSum += Math.max(0, original - corrected);
+                } else {
+                    settledSum += original;
+                }
+            });
+            return { count: inYear.length, originalSum, settledSum, savingsSum, cases: inYear };
+        }
+        window.computeDossierSummary = computeDossierSummary;
+
+        async function renderDossierSummary() {
+            const bar = document.getElementById('dossier-summary-bar');
+            if (!bar) return;
+            const cases = await ProofMedStorage.getCases();
+            const year = document.getElementById('dossier-year-select')?.value || 'all';
+            const s = computeDossierSummary(cases, year);
+
+            if (s.count === 0) {
+                bar.classList.add('hidden');
+                return;
+            }
+            bar.classList.remove('hidden');
+            bar.innerHTML = `
+                <div class="glass-card p-3.5 rounded-xl border-slate-800 text-center">
+                    <div class="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Ursprüngliche Liquidationen</div>
+                    <div class="text-lg font-black text-white mt-1">${s.originalSum.toFixed(2)} €</div>
+                </div>
+                <div class="glass-card p-3.5 rounded-xl border-slate-800 text-center">
+                    <div class="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Regulierter Endbetrag</div>
+                    <div class="text-lg font-black text-white mt-1">${s.settledSum.toFixed(2)} €</div>
+                </div>
+                <div class="glass-card p-3.5 rounded-xl border-emerald-500/30 bg-emerald-950/20 text-center">
+                    <div class="text-[10px] text-emerald-400 font-medium uppercase tracking-wide">Gesamtersparnis</div>
+                    <div class="text-lg font-black text-emerald-400 mt-1">${s.savingsSum.toFixed(2)} €</div>
+                </div>
+            `;
+        }
+        window.renderDossierSummary = renderDossierSummary;
+
         async function renderCasesDossier() {
             const container = document.getElementById('dossier-cases-list');
             if (!container) return;
 
             const cases = await ProofMedStorage.getCases();
+            try { await renderDossierSummary(); } catch (e) {}
 
             if (cases.length === 0) {
                 container.innerHTML = '<div class="glass-card p-6 text-center text-xs text-slate-500 rounded-xl">Noch keine Fälle mit Zahlungsstopp erfasst.</div>';
@@ -2735,6 +3023,7 @@
 
             container.innerHTML = sorted.map(c => {
                 const meta = caseStatusMeta(c.status);
+                const isResolved = c.status === 'RESOLVED';
                 return `
                     <div class="glass-card p-4 rounded-xl border-slate-800 space-y-2 text-xs">
                         <div class="flex items-start justify-between">
@@ -2746,7 +3035,13 @@
                                 <span>${meta.emoji}</span><span>${meta.label}</span>
                             </span>
                         </div>
-                        <div class="text-white font-bold text-sm">${(c.totalAmount || 0).toFixed(2)} €</div>
+                        <div class="flex items-baseline space-x-3">
+                            <div class="${isResolved ? 'text-slate-500 line-through text-xs' : 'text-white font-bold text-sm'}">${(c.originalAmount || 0).toFixed(2)} €</div>
+                            ${isResolved ? `
+                                <div class="text-emerald-400 font-bold text-sm">→ ${(c.correctedAmount || 0).toFixed(2)} €</div>
+                                <div class="text-[10px] text-emerald-500/80">(Ersparnis: ${(c.savedAmount || 0).toFixed(2)} €)</div>
+                            ` : ''}
+                        </div>
                         <div class="text-[10px] font-mono text-slate-500 truncate">SHA-256: ${c.sha256Hash || 'n/a'}</div>
                         <div class="flex justify-end space-x-3 border-t border-slate-800/80 pt-2">
                             ${c.status !== 'RESOLVED' ? `
@@ -2766,7 +3061,7 @@
         }
         window.renderCasesDossier = renderCasesDossier;
 
-        function displayAuditResults(sourceName, date, practice, codes, totalClaimed, issues, matchedLog) {
+        async function displayAuditResults(sourceName, date, practice, codes, totalClaimed, issues, matchedLog, auditedTotal = null) {
             const resultCard = document.getElementById('result-status-card');
             const resultSection = document.getElementById('audit-result');
             const objectionCard = document.getElementById('objection-card');
@@ -2848,26 +3143,33 @@
 
             if (issues.length > 0) {
                 objectionCard?.classList.remove('hidden');
-                
-                const objectionBody = `Sehr geehrte Damen und Herren,\n\nbezüglich Ihrer Liquidation (${practice}, Datum: ${date}) lege ich hiermit formellen Einwand ein.\n\nFolgende Abweichungen wurden festgestellt:\n${issues.map(i => '- ' + i.msg).join('\n')}\n\n${matchedLog ? `Verifizierter Geofence-Anwesenheitsnachweis:\n- Datum: ${matchedLog.date}\n- Anwesenheit: ${matchedLog.arrival} - ${matchedLog.departure} Uhr (${matchedLog.durationMin} Min.)\n- SHA-256 Audit Hash: ${matchedLog.proofHash}\n\n` : ''}Ich bitte um Überprüfung und Übermittlung einer korrigierten Rechnung.\n\nMit freundlichen Grüßen,\nMax Mustermann`;
-                
+
+                // Sign the letter with the patient's own name/address when a profile has
+                // been configured, instead of the hardcoded "Max Mustermann" placeholder.
+                let profile = { fullName: '', address: '', isConfigured: false };
+                try { profile = await ProofMedStorage.getProfile(); } catch (e) {}
+                const signatureName = profile.fullName || 'Max Mustermann';
+                const signatureBlock = profile.address ? `${signatureName}\n${profile.address}` : signatureName;
+
+                const objectionBody = `Sehr geehrte Damen und Herren,\n\nbezüglich Ihrer Liquidation (${practice}, Datum: ${date}) lege ich hiermit formellen Einwand ein.\n\nFolgende Abweichungen wurden festgestellt:\n${issues.map(i => '- ' + i.msg).join('\n')}\n\n${matchedLog ? `Verifizierter Geofence-Anwesenheitsnachweis:\n- Datum: ${matchedLog.date}\n- Anwesenheit: ${matchedLog.arrival} - ${matchedLog.departure} Uhr (${matchedLog.durationMin} Min.)\n- SHA-256 Audit Hash: ${matchedLog.proofHash}\n\n` : ''}Ich bitte um Überprüfung und Übermittlung einer korrigierten Rechnung.\n\nMit freundlichen Grüßen,\n${signatureBlock}`;
+
                 const objText = document.getElementById('objection-text');
                 const objEmail = document.getElementById('objection-email');
                 const practiceEmail = derivePracticeEmail(practice);
-                
+
                 if (objText) objText.value = objectionBody;
                 if (objEmail) {
                     objEmail.value = practiceEmail;
                     selectPreset('custom', practiceEmail);
                 }
-                
+
                 // Update custom preset pill subtext
                 const customPillSubtext = document.querySelector('#preset-pill-custom .text-\\[10px\\]');
                 if (customPillSubtext) {
                     customPillSubtext.textContent = practiceEmail;
                 }
 
-                lastAuditData = { practice, date, codes, totalClaimed, issues, matchedLog, objectionBody };
+                lastAuditData = { practice, date, codes, totalClaimed, issues, matchedLog, objectionBody, auditedTotal };
 
                 // Show/hide the "Originalbeleg wird automatisch beigefügt" indicator
                 const attachIndicator = document.getElementById('invoice-attach-indicator');
@@ -2906,13 +3208,15 @@
             const email = document.getElementById('objection-email').value;
             const rawText = document.getElementById('objection-text').value;
 
-            // Normalize to CRLF (RFC 2822 email line-break convention), then run the ENTIRE
-            // subject/body through encodeURIComponent exactly once. Hand-rolling percent-escapes
-            // for only the newlines (as before) left &, %, umlauts etc. unescaped, which can
-            // truncate the mailto URL at the first stray "&" or corrupt it outright — leaving
-            // the paragraphs, bullet points, and Geofence proof block as one garbled line in
-            // some mail clients.
-            const body = rawText.replace(/\r\n|\r|\n/g, '\r\n');
+            // Force a strict double-CRLF between every line (paragraphs AND list items
+            // alike) — some webmail providers (WEB.DE, GMX, Gmail) flatten single line
+            // breaks when converting a mailto body to HTML, collapsing bullet points and
+            // paragraphs into one run-on block unless each line is its own "blank-line"
+            // separated paragraph. The whole body is then run through encodeURIComponent
+            // exactly once — hand-rolling percent-escapes for only the newlines (as
+            // before) left &, %, umlauts etc. unescaped, which can truncate the mailto
+            // URL at the first stray "&" or corrupt it outright.
+            const body = toDoubleCrlfBody(rawText);
             const subject = 'Formeller Einwand Liquidation';
 
             // Persist the payment-freeze case before handing off to the mail app — the tap
@@ -3022,75 +3326,242 @@
             showToast("CSV-Dossier heruntergeladen!");
         }
 
-        async function printDossierPDF() {
-            const logs = await ProofMedStorage.getDiaryLogs();
-            if (logs.length === 0) {
-                showToast("Keine Tagebucheinträge vorhanden.", true);
-                return;
+        /**
+         * Builds the Annual Tax/Insurance Dossier (§ 33 EStG / PKV / Beihilfe) as a real
+         * jsPDF document: a letterhead with the ProofMed logo and the patient's profile
+         * box (name, address, insurance/Beihilfe numbers, export date & tax year), KPI
+         * summary cards (original / settled / savings), and an itemized table of every
+         * case with its linked visit's time window and duration where available.
+         */
+        async function buildDossierPdfDoc(year) {
+            if (!window.jspdf || !window.jspdf.jsPDF) {
+                showToast("PDF-Bibliothek nicht verfügbar (bitte Internetverbindung prüfen)", true);
+                return null;
             }
 
-            const iframe = document.createElement('iframe');
-            iframe.style.position = 'fixed';
-            iframe.style.right = '0';
-            iframe.style.bottom = '0';
-            iframe.style.width = '0';
-            iframe.style.height = '0';
-            iframe.style.border = '0';
-            document.body.appendChild(iframe);
+            const [profile, allCases, diaryLogs] = await Promise.all([
+                ProofMedStorage.getProfile(),
+                ProofMedStorage.getCases(),
+                ProofMedStorage.getDiaryLogs(),
+            ]);
+            const summary = computeDossierSummary(allCases, year);
+            const cases = [...summary.cases].sort((a, b) => String(a.invoiceDate || '').localeCompare(String(b.invoiceDate || '')));
+            const diaryById = new Map(diaryLogs.map(l => [l.id, l]));
 
-            const doc = iframe.contentWindow.document;
-            doc.open();
-            doc.write(`
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>ProofMed Jahres-Dossier</title>
-                    <style>
-                        body { font-family: sans-serif; padding: 30px; font-size: 10pt; color: #0f172a; }
-                        h1 { font-size: 16pt; color: #2563eb; }
-                        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                        th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; }
-                        th { background: #f8fafc; font-weight: bold; }
-                    </style>
-                </head>
-                <body>
-                    <h1>ProofMed – Patientendossier & Geofence-Nachweis</h1>
-                    <p>Erstellt am: ${new Date().toLocaleDateString('de-DE')}</p>
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+            const pageW = doc.internal.pageSize.getWidth();
+            const pageH = doc.internal.pageSize.getHeight();
+            const marginX = 14;
+            const contentW = pageW - marginX * 2;
+            let y = 16;
 
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Datum</th>
-                                <th>Praxis / Arzt</th>
-                                <th>Zeitfenster</th>
-                                <th>Dauer</th>
-                                <th>Erfassung</th>
-                                <th>SHA-256 Hash</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${logs.map(l => `
-                                <tr>
-                                    <td>${l.date}</td>
-                                    <td>${l.practice}</td>
-                                    <td>${l.arrival} - ${l.departure}</td>
-                                    <td>${l.durationMin} Min.</td>
-                                    <td>${l.logType}</td>
-                                    <td style="font-family: monospace; font-size: 8pt;">${l.proofHash ? l.proofHash.substring(0, 16) + '...' : ''}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </body>
-                </html>
-            `);
-            doc.close();
+            const ensureSpace = (needed) => {
+                if (y + needed > pageH - 16) {
+                    doc.addPage();
+                    y = 18;
+                }
+            };
 
-            setTimeout(() => {
-                iframe.contentWindow.focus();
-                iframe.contentWindow.print();
-                setTimeout(() => iframe.remove(), 1000);
-            }, 300);
+            // --- Header: logo + "ProofMed | Patientendossier & Nachweisübersicht" ---
+            const logoDataUrl = await getLogoDataUrl();
+            let headerTextX = marginX;
+            if (logoDataUrl) {
+                try {
+                    doc.addImage(logoDataUrl, 'PNG', marginX, y - 3, 12, 12);
+                    headerTextX = marginX + 16;
+                } catch (e) { /* non-fatal */ }
+            }
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(15);
+            doc.setTextColor(...PDF_COLORS.brandDark);
+            doc.text('ProofMed', headerTextX, y + 4);
+            const proofMedWidth = doc.getTextWidth('ProofMed');
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(10.5);
+            doc.setTextColor(...PDF_COLORS.textMuted);
+            doc.text('|  Patientendossier & Nachweisübersicht', headerTextX + proofMedWidth + 2, y + 4);
+            y += 14;
+            doc.setDrawColor(...PDF_COLORS.chipBorder);
+            doc.setLineWidth(0.4);
+            doc.line(marginX, y, pageW - marginX, y);
+            y += 9;
+
+            // --- Patient profile / letterhead box ---
+            const yearLabel = (year && year !== 'all') ? `Steuerjahr ${year}` : 'Alle Jahre';
+            ensureSpace(28);
+            doc.setFillColor(248, 250, 252);
+            doc.setDrawColor(...PDF_COLORS.chipBorder);
+            doc.roundedRect(marginX, y, contentW, 26, 1.5, 1.5, 'FD');
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(10);
+            doc.setTextColor(...PDF_COLORS.brandDark);
+            doc.text(profile.fullName || 'Patient/in', marginX + 4, y + 6);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8.5);
+            doc.setTextColor(...PDF_COLORS.textBody);
+            const addressLines = doc.splitTextToSize(profile.address || '—', contentW / 2 - 8);
+            doc.text(addressLines, marginX + 4, y + 10.5);
+
+            const rightColX = marginX + contentW / 2 + 4;
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8.5);
+            doc.setTextColor(...PDF_COLORS.textMuted);
+            doc.text(`Versichertennummer: ${profile.insuranceNumber || '—'}${profile.insuranceName ? ' (' + profile.insuranceName + ')' : ''}`, rightColX, y + 6);
+            doc.text(`Beihilfenummer: ${profile.beihilfeNumber || '—'}`, rightColX, y + 10.5);
+            doc.text(`Export-Datum: ${new Date().toLocaleDateString('de-DE')} · ${yearLabel}`, rightColX, y + 15);
+            y += 30;
+
+            // --- KPI summary cards ---
+            ensureSpace(24);
+            const cardW = (contentW - 8) / 3;
+            const kpis = [
+                { label: 'Urspr. Liquidationen', value: summary.originalSum, color: PDF_COLORS.brandDark },
+                { label: 'Regulierter Endbetrag', value: summary.settledSum, color: PDF_COLORS.brandDark },
+                { label: 'Gesamtersparnis', value: summary.savingsSum, color: [5, 150, 105] },
+            ];
+            kpis.forEach((kpi, idx) => {
+                const cx = marginX + idx * (cardW + 4);
+                doc.setFillColor(248, 250, 252);
+                doc.setDrawColor(...PDF_COLORS.chipBorder);
+                doc.roundedRect(cx, y, cardW, 20, 1.5, 1.5, 'FD');
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(7.5);
+                doc.setTextColor(...PDF_COLORS.textMuted);
+                doc.text(kpi.label, cx + cardW / 2, y + 7, { align: 'center' });
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(12);
+                doc.setTextColor(...kpi.color);
+                doc.text(`${kpi.value.toFixed(2)} €`, cx + cardW / 2, y + 15, { align: 'center' });
+            });
+            y += 26;
+
+            // --- Itemized table: every case, with its linked visit's time/duration ---
+            ensureSpace(12);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(11.5);
+            doc.setTextColor(...PDF_COLORS.brandDark);
+            doc.text('Übersicht aller Fälle', marginX, y);
+            y += 7;
+
+            const cols = [
+                { label: 'Datum', w: 16 },
+                { label: 'Praxis / Arzt', w: 36 },
+                { label: 'Zeitfenster', w: 22 },
+                { label: 'Dauer', w: 14 },
+                { label: 'Status', w: 24 },
+                { label: 'Betrag (€)', w: 30 },
+                { label: 'SHA-256', w: 0 }, // absorbs remaining width
+            ];
+            const fixedW = cols.reduce((s, c) => s + c.w, 0);
+            cols[cols.length - 1].w = Math.max(20, contentW - fixedW);
+
+            const drawTableHeader = () => {
+                doc.setFillColor(241, 245, 249);
+                doc.rect(marginX, y, contentW, 7, 'F');
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(7);
+                doc.setTextColor(...PDF_COLORS.brandDark);
+                let cx = marginX;
+                cols.forEach(col => {
+                    doc.text(col.label, cx + 1.5, y + 4.8);
+                    cx += col.w;
+                });
+                y += 7;
+            };
+            drawTableHeader();
+
+            if (cases.length === 0) {
+                ensureSpace(10);
+                doc.setFont('helvetica', 'italic');
+                doc.setFontSize(8.5);
+                doc.setTextColor(...PDF_COLORS.textMuted);
+                doc.text('Keine Fälle im ausgewählten Zeitraum.', marginX + 2, y + 5);
+                y += 10;
+            }
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7);
+            cases.forEach((c, idx) => {
+                const diary = c.diaryEntryId ? diaryById.get(c.diaryEntryId) : null;
+                const meta = caseStatusMeta(c.status);
+                const amountText = c.status === 'RESOLVED'
+                    ? `${(c.originalAmount || 0).toFixed(2)} -> ${(c.correctedAmount || 0).toFixed(2)}`
+                    : `${(c.originalAmount || 0).toFixed(2)}`;
+                const rowH = 6.5;
+
+                if (y + rowH > pageH - 16) {
+                    doc.addPage();
+                    y = 18;
+                    drawTableHeader();
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(7);
+                }
+
+                if (idx % 2 === 1) {
+                    doc.setFillColor(250, 250, 251);
+                    doc.rect(marginX, y, contentW, rowH, 'F');
+                }
+
+                let cx = marginX;
+                const cellText = (text, w) => {
+                    const line = doc.splitTextToSize(String(text), w - 2)[0] || '';
+                    doc.text(line, cx + 1.5, y + 4.3);
+                    cx += w;
+                };
+                doc.setTextColor(...PDF_COLORS.textBody);
+                cellText(c.invoiceDate || '–', cols[0].w);
+                cellText(c.doctorName || '–', cols[1].w);
+                cellText(diary ? `${diary.arrival}-${diary.departure}` : '–', cols[2].w);
+                cellText(diary ? `${diary.durationMin} Min.` : '–', cols[3].w);
+
+                // Status: a small colored dot instead of the emoji — jsPDF's built-in
+                // Helvetica font has no glyphs for Unicode emoji (they render as garbled
+                // Latin-1 fallback characters), so a drawn shape is used instead.
+                const statusColor = c.status === 'RESOLVED' ? PDF_COLORS.successBorder
+                    : c.status === 'WAITING_CORRECTION' ? PDF_COLORS.warnBorder
+                    : PDF_COLORS.errorBorder;
+                doc.setFillColor(...statusColor);
+                doc.circle(cx + 1.8, y + 3.4, 1, 'F');
+                doc.setTextColor(...PDF_COLORS.textBody);
+                const statusLine = doc.splitTextToSize(meta.label, cols[4].w - 5)[0] || '';
+                doc.text(statusLine, cx + 4.2, y + 4.3);
+                cx += cols[4].w;
+
+                cellText(amountText, cols[5].w);
+                doc.setFont('courier', 'normal');
+                cellText(c.sha256Hash ? c.sha256Hash.slice(0, 10) + '…' : '–', cols[6].w);
+                doc.setFont('helvetica', 'normal');
+
+                y += rowH;
+            });
+
+            return doc;
+        }
+        window.buildDossierPdfDoc = buildDossierPdfDoc;
+
+        async function printDossierPDF() {
+            try {
+                const year = document.getElementById('dossier-year-select')?.value || 'all';
+                const doc = await buildDossierPdfDoc(year);
+                if (!doc) return;
+
+                // Same real-PDF print/share idiom as the objection PDF: embed an auto-print
+                // command and open the blob so the OS/browser's own "Save as PDF" hands the
+                // user a genuine file, falling back to a direct download if popups are blocked.
+                doc.autoPrint();
+                const blobUrl = doc.output('bloburl');
+                const printWindow = window.open(blobUrl, '_blank');
+
+                if (!printWindow) {
+                    doc.save(`proofmed_dossier_${year}.pdf`);
+                    showToast("Popup blockiert – PDF wurde stattdessen heruntergeladen.");
+                }
+            } catch (err) {
+                console.error("printDossierPDF error:", err);
+                showToast("Fehler beim Dossier-PDF: " + (err.message || err), true);
+            }
         }
 
         // Expose all interactive functions to global window scope for inline event handlers
@@ -3148,6 +3619,11 @@
                 await renderDiaryLogs();
             } catch (err) {
                 console.error("renderDiaryLogs error:", err);
+            }
+            try {
+                await updateProfileBanner();
+            } catch (err) {
+                console.error("updateProfileBanner error:", err);
             }
         });
 
