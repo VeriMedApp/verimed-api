@@ -1472,9 +1472,14 @@
 
         /**
          * Image Preprocessing & Normalization on HTML5 Canvas:
-         * - Downscales image if dimensions exceed 1800px (ensuring fast, crisp OCR on mobile & desktop)
+         * - Downscales image only if dimensions exceed 2400px, so small invoice-table digits
+         *   (1, 3, 5, 8, 250, ...) in high-resolution mobile screenshots stay sharp instead of
+         *   being shrunk into illegible blur.
          * - Applies grayscale luminance weighting (0.299*R + 0.587*G + 0.114*B)
-         * - Applies dynamic binarization and contrast stretching to sharpen printed text and remove paper shadows
+         * - Applies adaptive (locally-varying) thresholding: a per-block local background
+         *   estimate drives the binarization cutoff instead of one fixed global pivot, so
+         *   uneven lighting/shadows across a photographed document no longer wash out or
+         *   blacken entire regions of text.
          */
         async function preprocessImageToCanvas(imageSource) {
             try {
@@ -1503,14 +1508,16 @@
                 let width = img.naturalWidth || img.width || 1200;
                 let height = img.naturalHeight || img.height || 1600;
 
-                // Downscale image if dimensions exceed 1800px
-                const maxDim = 1800;
+                // Downscale only if dimensions exceed 2400px (keeps small table digits crisp
+                // on high-res mobile screenshots); upscale genuinely small/low-res photos so
+                // Tesseract has enough pixels per character to work with.
+                const maxDim = 2400;
                 if (width > maxDim || height > maxDim) {
                     const ratio = Math.min(maxDim / width, maxDim / height);
                     width = Math.round(width * ratio);
                     height = Math.round(height * ratio);
-                } else if (width < 800 && height < 800) {
-                    const scale = 1200 / Math.max(width, height);
+                } else if (width < 900 && height < 900) {
+                    const scale = 1500 / Math.max(width, height);
                     width = Math.round(width * scale);
                     height = Math.round(height * scale);
                 }
@@ -1523,38 +1530,74 @@
                     URL.revokeObjectURL(cleanupUrl);
                 }
 
-                // Grayscale luminance weighting (0.299*R + 0.587*G + 0.114*B) + dynamic binarization / contrast stretching
+                // Grayscale luminance weighting + global contrast stretch + adaptive local thresholding
                 try {
                     const imgData = ctx.getImageData(0, 0, width, height);
                     const data = imgData.data;
                     const len = data.length;
+                    const pixelCount = len / 4;
 
+                    // Pass 1: grayscale + global min/max (corrects overall under/over-exposure)
                     let minGray = 255;
                     let maxGray = 0;
-                    const grays = new Uint8Array(len / 4);
+                    const grays = new Float32Array(pixelCount);
 
                     for (let i = 0, j = 0; i < len; i += 4, j++) {
-                        const gray = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) | 0;
+                        const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
                         grays[j] = gray;
                         if (gray < minGray) minGray = gray;
                         if (gray > maxGray) maxGray = gray;
                     }
-
                     const range = Math.max(1, maxGray - minGray);
+                    for (let j = 0; j < pixelCount; j++) {
+                        grays[j] = ((grays[j] - minGray) / range) * 255;
+                    }
 
-                    for (let i = 0, j = 0; i < len; i += 4, j++) {
-                        let normalized = ((grays[j] - minGray) / range) * 255;
+                    // Pass 2: local background estimate via a coarse block-average grid — a cheap
+                    // approximation of a large-kernel blur. Block size scales with image size so
+                    // the grid stays meaningful at both screenshot and photo resolutions. This is
+                    // what makes the threshold "adaptive": it follows uneven lighting/shadows
+                    // across a photographed document instead of using one fixed global cutoff.
+                    const blockSize = Math.max(16, Math.round(Math.min(width, height) / 40));
+                    const gridW = Math.ceil(width / blockSize);
+                    const gridH = Math.ceil(height / blockSize);
+                    const blockSums = new Float64Array(gridW * gridH);
+                    const blockCounts = new Int32Array(gridW * gridH);
 
-                        // Dynamic binarization & contrast curve: sharpen printed text, eliminate paper shadows
-                        if (normalized < 130) {
-                            normalized = Math.max(0, normalized * 0.80);
-                        } else {
-                            normalized = Math.min(255, normalized * 1.20);
+                    for (let y = 0; y < height; y++) {
+                        const gy = (y / blockSize) | 0;
+                        const rowBase = y * width;
+                        for (let x = 0; x < width; x++) {
+                            const gi = gy * gridW + ((x / blockSize) | 0);
+                            blockSums[gi] += grays[rowBase + x];
+                            blockCounts[gi]++;
                         }
+                    }
+                    const blockAvg = new Float64Array(gridW * gridH);
+                    for (let i = 0; i < blockAvg.length; i++) {
+                        blockAvg[i] = blockCounts[i] > 0 ? blockSums[i] / blockCounts[i] : 200;
+                    }
 
-                        data[i] = normalized;     // R
-                        data[i + 1] = normalized; // G
-                        data[i + 2] = normalized; // B
+                    // Pass 3: per-pixel adaptive threshold + soft push toward black/white. Text
+                    // must be at least ADAPTIVE_BIAS levels darker than its local background to
+                    // be treated as ink, so a locally dark shadow no longer gets misread as text.
+                    const ADAPTIVE_BIAS = 15;
+                    for (let y = 0, i = 0, j = 0; y < height; y++) {
+                        const gy = (y / blockSize) | 0;
+                        for (let x = 0; x < width; x++, i += 4, j++) {
+                            const localThreshold = blockAvg[gy * gridW + ((x / blockSize) | 0)] - ADAPTIVE_BIAS;
+                            let normalized = grays[j];
+
+                            if (normalized < localThreshold) {
+                                normalized = Math.max(0, normalized * 0.78);
+                            } else {
+                                normalized = Math.min(255, normalized * 1.20);
+                            }
+
+                            data[i] = normalized;     // R
+                            data[i + 1] = normalized; // G
+                            data[i + 2] = normalized; // B
+                        }
                     }
 
                     ctx.putImageData(imgData, 0, 0);
@@ -1717,20 +1760,25 @@
 
         /**
          * Normalizes OCR text and fixes common digit typos:
-         * - Normalize typos: replace GOA / GOAE with GOÄ, Ziffer/Nr./Pos. with GOÄ 
+         * - Normalize typos: replace GOA / G0A / GOAE / GOE / bare GO with GOÄ, Ziffer/Nr./Pos with GOÄ
          * - Fix digit confusions: 25O -> 250, 65O -> 650, 2OO -> 200, 2OO6 -> 2006, 41O -> 410, 42O -> 420
          */
         function normalizeOCRText(input) {
             if (!input) return '';
             let text = String(input);
 
-            // 1. Normalize GOA / GOAE variants to standard GOÄ
-            text = text.replace(/GOAE/gi, 'GOÄ');
-            text = text.replace(/GOA\b/gi, 'GOÄ');
-            text = text.replace(/GOA\s*(\d+|[A-D]|K1)/gi, 'GOÄ $1');
+            // 1. Normalize GOÄ OCR variants to a standard "GOÄ" token. Mobile Tesseract passes
+            // on camera photos/screenshots commonly misread this label as GOA, G0A (zero for
+            // O), GOAE, or GOE (umlaut dropped/misread as E), or drop the trailing letter
+            // entirely down to a bare "GO" immediately followed by the code.
+            text = text.replace(/G[0O]A[EÄ]?/gi, 'GOÄ');
+            text = text.replace(/GOE\b/gi, 'GOÄ');
+            text = text.replace(/\bGO\s*(?=(?:\d{1,4}|[A-D]|K1)\b)/gi, 'GOÄ ');
 
-            // 2. Replace Ziffer / Nr. / Pos. with GOÄ 
-            text = text.replace(/\b(?:Ziffer|Nr\.|Pos\.)\s*/gi, 'GOÄ ');
+            // 2. Replace Ziffer / Nr. / Pos (with or without a trailing period) with GOÄ.
+            // "Nr" keeps its required period — unlike "Pos", it's ambiguous with unrelated
+            // reference numbers (Rechnungs-Nr., Kunden-Nr.) that must never become GOÄ codes.
+            text = text.replace(/\b(?:Ziffer|Nr\.|Pos\.?)\s*/gi, 'GOÄ ');
 
             // 3. Fix digit confusions: 25O -> 250, 65O -> 650, 2OO -> 200, 2OO6 -> 2006, 41O -> 410, 42O -> 420
             text = text.replace(/\b25[Oo]\b/g, '250');
@@ -1920,9 +1968,11 @@
                 // no matter what numbers or letters they happen to contain.
                 const SKIP_LINE_PATTERN = /^(Hinweis|Test-Hinweis|ProofMed|Mindestbehandlungszeit|Rechtlicher Hinweis|Zahlungsziel|Bankverbindung|IBAN|Steuernummer|Impressum|Anmerkung)\b/i;
 
-                // Extracts the multiplier factor (e.g. "3,5x", "1,8-fach") from a text segment.
+                // Extracts the multiplier factor (e.g. "3,5x", "1,8-fach", "2,3×") from a text
+                // segment. "×" (multiplication sign) is accepted alongside "x" — mobile OCR of
+                // a printed factor column commonly renders it either way.
                 const extractFactor = (segment) => {
-                    const fm = segment.match(/(\d+(?:[.,]\d+)?)\s*(?:x|-fach|fach)\b/i);
+                    const fm = segment.match(/(\d+(?:[.,]\d+)?)\s*(?:x|×|-fach|fach)(?![a-zA-Zäöüß])/i);
                     if (!fm) return null;
                     const pf = parseFloat(fm[1].replace(',', '.'));
                     return (!isNaN(pf) && pf > 0 && pf <= 10) ? pf : null;
@@ -1941,22 +1991,25 @@
                     if (!trimmedLine) return;
                     if (SKIP_LINE_PATTERN.test(trimmedLine)) return;
 
-                    const hasFactor = /(\d+(?:[.,]\d+)?)\s*(?:x|-fach|fach)\b/i.test(trimmedLine);
+                    const hasFactor = /(\d+(?:[.,]\d+)?)\s*(?:x|×|-fach|fach)(?![a-zA-Zäöüß])/i.test(trimmedLine);
                     // Note: no \b after €/EUR — € is a non-word char, so \b never matches when
                     // followed by whitespace/newline/end. A negative lookahead is used instead.
                     const hasAmount = /\d+[.,]\d{2}\s*(?:€|EUR)(?![a-zA-Z0-9])/i.test(trimmedLine);
                     if (!hasFactor && !hasAmount) return;
 
-                    // a) Standard identifier: GOÄ (normalizeOCRText already folds GOA/Ziffer/Nr./Pos. into GOÄ)
-                    const idMatches = [...trimmedLine.matchAll(/\bGOÄ\s*([0-9]{1,4}|[A-D]|K1)\b/gi)];
+                    // a) Standard identifier: GOÄ (normalizeOCRText already folds GOA/G0A/GOE/GO/
+                    // Ziffer/Nr./Pos into GOÄ). A single stray punctuation mark between the label
+                    // and the code (e.g. "GOÄ.3", "GOÄ:3" from noisy OCR) is tolerated, but the
+                    // code must still immediately follow — no unrelated words in between.
+                    const idMatches = [...trimmedLine.matchAll(/\bGOÄ\s*[:.\-]?\s*([0-9]{1,4}|[A-D]|K1)\b/gi)];
                     idMatches.forEach((im, idx) => {
                         const segEnd = idx + 1 < idMatches.length ? idMatches[idx + 1].index : trimmedLine.length;
                         const segment = trimmedLine.slice(im.index + im[0].length, segEnd);
                         addCode(im[1], extractFactor(segment));
                     });
 
-                    // b) Surcharges: Zuschlag A-D / K1 (same nearest-factor pairing)
-                    const surMatches = [...trimmedLine.matchAll(/\b(?:Zuschlag|Zuschl\.?)\s*([A-D]|K1)\b/gi)];
+                    // b) Surcharges: Zuschlag A-D / K1 (same nearest-factor pairing, same noise tolerance)
+                    const surMatches = [...trimmedLine.matchAll(/\b(?:Zuschlag|Zuschl\.?)\s*[:.\-]?\s*([A-D]|K1)\b/gi)];
                     surMatches.forEach((sm, idx) => {
                         const segEnd = idx + 1 < surMatches.length ? surMatches[idx + 1].index : trimmedLine.length;
                         const segment = trimmedLine.slice(sm.index + sm[0].length, segEnd);
