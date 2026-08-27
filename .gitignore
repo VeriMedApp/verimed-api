@@ -17,3 +17,7 @@ env/
 .vscode/
 .idea/
 .DS_Store
+
+# IP-Snapshot-Archive (siehe PROJECT_IP_METADATA.md)
+*.zip
+*.ots
