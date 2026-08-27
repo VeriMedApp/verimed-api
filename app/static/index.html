@@ -355,6 +355,23 @@
                         <span><strong>Hinweis:</strong> ProofMed ist ein technischer Prüf-Assistent und führt keine individuelle Rechtsberatung (§ 2 RDG) durch.</span>
                     </div>
                 </div>
+
+                <!-- Correction Match Proposal Card: only shown for a GREEN audit result when
+                     exactly one high-confidence open FROZEN case was found (see
+                     findCorrectionCandidateCase). Never auto-resolves — always requires an
+                     explicit "Korrektur übernehmen" click. -->
+                <div id="correction-proposal-card" class="hidden glass-card p-5 rounded-2xl border border-emerald-500/30 space-y-3">
+                    <div class="flex items-center space-x-2 border-b border-slate-800 pb-3">
+                        <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <h4 class="text-sm font-bold text-white">Korrekturrechnung erkannt</h4>
+                    </div>
+                    <div id="correction-proposal-body" class="text-xs space-y-2"></div>
+                    <div class="flex space-x-2 pt-1">
+                        <button id="correction-proposal-dismiss" onclick="dismissCorrectionProposal()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs py-2.5 rounded-xl border border-slate-700 transition-all">Nicht zuordnen</button>
+                        <button id="correction-proposal-confirm" onclick="confirmCorrectionProposal()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs py-2.5 rounded-xl shadow transition-all">Korrektur übernehmen</button>
+                    </div>
+                    <p class="text-[10px] text-slate-500 leading-relaxed">Automatische Zuordnung basiert auf Praxisname, Behandlungsdatum und erkannten Korrekturmerkmalen — keine rechtliche oder medizinische Prüfung. Bitte prüfen, bevor du übernimmst.</p>
+                </div>
             </div>
         </section>
 
@@ -539,6 +556,31 @@
                 </div>
             </div>
             <button onclick="saveProfile()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs py-2.5 rounded-xl shadow transition-all">Profil speichern</button>
+        </div>
+    </div>
+
+    <!-- Correction Amount Modal: replaces native prompt() (renders unreliably in the Android
+         Capacitor WebView — a bare Cancel/OK dialog with no usable text field) with an in-app
+         modal, following the same pattern as the Profile modal above. -->
+    <div id="correction-modal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="glass-card max-w-md w-full p-6 rounded-2xl border border-slate-800 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="text-sm font-bold text-white">Korrigierte Rechnung</h3>
+                <button onclick="closeCorrectionModal()" class="text-slate-400 hover:text-white font-bold text-sm">✕</button>
+            </div>
+            <div class="text-xs space-y-1">
+                <div id="correction-modal-practice" class="font-semibold text-white"></div>
+                <div id="correction-modal-original" class="text-slate-400"></div>
+            </div>
+            <div>
+                <label class="block text-slate-400 text-[11px] mb-1 font-medium">Korrigierter Rechnungsbetrag</label>
+                <input type="text" inputmode="decimal" id="correction-modal-input" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500 text-sm" placeholder="z.B. 69,55">
+                <div id="correction-modal-warning" class="hidden text-amber-400 text-[11px] mt-1.5 leading-relaxed"></div>
+            </div>
+            <div class="flex space-x-2 pt-1">
+                <button onclick="closeCorrectionModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs py-2.5 rounded-xl border border-slate-700 transition-all">Abbrechen</button>
+                <button id="correction-modal-confirm-btn" onclick="confirmCorrectionModal()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs py-2.5 rounded-xl shadow transition-all">Korrektur übernehmen</button>
+            </div>
         </div>
     </div>
 
@@ -2900,8 +2942,14 @@
                 // Status Toast Feedback
                 showToast(`🟢 ${extractedCodes.length} GOÄ-Ziffern erfolgreich aus Dokument ausgelesen!`);
 
+                // Detects a corrected-invoice marker in the scanned text (e.g. "KORRIGIERTE
+                // Privatliquidation", "Korrektur ..."), used as a confidence signal by the
+                // correction-match proposal (see findCorrectionCandidateCase) — never on its
+                // own grounds for auto-resolving anything.
+                const hasCorrectionMarker = /\bKORRIGIERT(E)?\b|\bKORREKTUR\b/i.test(normalizedText);
+
                 // Automatically invoke runAuditEngine()
-                await runAuditEngine(invoiceDate, practiceName, extractedCodes, factors, fname, invoiceTotal);
+                await runAuditEngine(invoiceDate, practiceName, extractedCodes, factors, fname, invoiceTotal, hasCorrectionMarker);
             } catch (err) {
                 console.error("parseOCRAndAudit error:", err);
                 showToast("Fehler bei der Rechnungsanalyse: " + (err.message || err), true);
@@ -2929,7 +2977,7 @@
         }
         window.runManualAudit = runManualAudit;
 
-        async function runAuditEngine(date, practice, codes, factors, sourceName, extractedTotal = null) {
+        async function runAuditEngine(date, practice, codes, factors, sourceName, extractedTotal = null, hasCorrectionMarker = false) {
             try {
                 const issues = [];
                 let computedTotalCents = 0;
@@ -2995,7 +3043,7 @@
                 // kept as the suggested "corrected amount" default for later, when the user
                 // marks this case resolved — it's the amount ProofMed's own audit arrived at,
                 // as opposed to totalClaimed which may include extra invoice-level charges.
-                await displayAuditResults(sourceName, date, practice, codes, totalClaimed, issues, matchedLog, computedTotal);
+                await displayAuditResults(sourceName, date, practice, codes, totalClaimed, issues, matchedLog, computedTotal, hasCorrectionMarker);
             } catch (err) {
                 console.error("runAuditEngine error:", err);
                 showToast("Fehler bei der Prüf-Engine: " + (err.message || err), true);
@@ -3090,52 +3138,253 @@
         }
         window.upsertCaseFromObjection = upsertCaseFromObjection;
 
-        // "Als korrigiert markieren": confirms the actual corrected invoice amount (or
-        // when uploading a corrected invoice, the OCR-extracted total can be entered here
-        // too), computes the realized savings, and closes the case.
+        // Computes and applies the correction resolution: sets correctedAmount, savedAmount,
+        // status and resolvedDate on the matching case, then persists and re-renders. This is
+        // the single source of truth for "closing" a case — the manual correction modal AND
+        // the automatic correction-match proposal (further below) both call this same function,
+        // so the savings calculation is never duplicated.
+        async function resolveCaseWithCorrectedAmount(caseId, correctedAmount) {
+            const cases = await ProofMedStorage.getCases();
+            const idx = cases.findIndex(c => c.id === caseId);
+            if (idx === -1) return null;
+            const c = cases[idx];
+
+            const savedAmount = Math.max(0, (c.originalAmount || 0) - correctedAmount);
+
+            cases[idx] = {
+                ...c,
+                correctedAmount,
+                savedAmount,
+                status: 'RESOLVED',
+                resolvedDate: new Date().toISOString().split('T')[0],
+            };
+
+            await ProofMedStorage.setCases(cases);
+            await renderCasesDossier();
+            await renderDiaryLogs();
+            return cases[idx];
+        }
+        window.resolveCaseWithCorrectedAmount = resolveCaseWithCorrectedAmount;
+
+        // "Als korrigiert markieren": opens the in-app correction modal (#correction-modal)
+        // instead of the native prompt() — window.prompt() renders unreliably in the Android
+        // Capacitor WebView (a bare Cancel/OK dialog with no usable text field), so the amount
+        // is now collected through a normal ProofMed modal, same pattern as the Profile modal.
+        let correctionModalCaseId = null;
+        let correctionModalOverAmountAcknowledged = false;
+
         async function markCaseResolved(caseId) {
             try {
                 const cases = await ProofMedStorage.getCases();
-                const idx = cases.findIndex(c => c.id === caseId);
-                if (idx === -1) return;
-                const c = cases[idx];
+                const c = cases.find(x => x.id === caseId);
+                if (!c) return;
+
+                correctionModalCaseId = caseId;
+                correctionModalOverAmountAcknowledged = false;
 
                 const suggested = (typeof c.auditedCorrectionAmount === 'number' && !isNaN(c.auditedCorrectionAmount))
                     ? c.auditedCorrectionAmount
                     : c.originalAmount;
 
-                const input = prompt(
-                    `Tatsächlich korrigierter Rechnungsbetrag für ${c.doctorName} (${c.invoiceDate}):\nUrsprünglich berechnet: ${(c.originalAmount || 0).toFixed(2)} €`,
-                    (suggested || 0).toFixed(2)
-                );
-                if (input === null) return; // cancelled
+                const practiceEl = document.getElementById('correction-modal-practice');
+                const originalEl = document.getElementById('correction-modal-original');
+                const inputEl = document.getElementById('correction-modal-input');
+                const warningEl = document.getElementById('correction-modal-warning');
+                const confirmBtn = document.getElementById('correction-modal-confirm-btn');
 
-                const correctedAmount = parseFloat(String(input).replace(',', '.'));
-                if (isNaN(correctedAmount) || correctedAmount < 0) {
-                    showToast("Ungültiger Betrag – Fall wurde nicht aktualisiert.", true);
-                    return;
-                }
+                if (practiceEl) practiceEl.textContent = `${c.doctorName} (${c.invoiceDate})`;
+                if (originalEl) originalEl.textContent = `Ursprünglich berechnet: ${(c.originalAmount || 0).toFixed(2)} €`;
+                if (inputEl) inputEl.value = (suggested || 0).toFixed(2);
+                if (warningEl) { warningEl.classList.add('hidden'); warningEl.textContent = ''; }
+                if (confirmBtn) confirmBtn.textContent = 'Korrektur übernehmen';
 
-                const savedAmount = Math.max(0, (c.originalAmount || 0) - correctedAmount);
-
-                cases[idx] = {
-                    ...c,
-                    correctedAmount,
-                    savedAmount,
-                    status: 'RESOLVED',
-                    resolvedDate: new Date().toISOString().split('T')[0],
-                };
-
-                await ProofMedStorage.setCases(cases);
-                await renderCasesDossier();
-                await renderDiaryLogs();
-                showToast(`Fall als korrigiert markiert! Ersparnis: ${savedAmount.toFixed(2)} €`);
+                document.getElementById('correction-modal')?.classList.remove('hidden');
             } catch (e) {
                 console.error("markCaseResolved error:", e);
-                showToast("Fehler beim Aktualisieren des Falls: " + (e.message || e), true);
+                showToast("Fehler beim Öffnen der Korrektur: " + (e.message || e), true);
             }
         }
         window.markCaseResolved = markCaseResolved;
+
+        function closeCorrectionModal() {
+            document.getElementById('correction-modal')?.classList.add('hidden');
+            correctionModalCaseId = null;
+            correctionModalOverAmountAcknowledged = false;
+        }
+        window.closeCorrectionModal = closeCorrectionModal;
+
+        // Confirms the manual correction modal. Rejects empty/NaN/negative input. If the
+        // entered amount exceeds the original amount, the first click only shows an inline
+        // warning and changes the button label — a second explicit click is required to
+        // actually proceed, satisfying "no over-original correction without explicit warning"
+        // without blocking a genuinely higher corrected amount outright.
+        async function confirmCorrectionModal() {
+            try {
+                if (!correctionModalCaseId) return;
+                const inputEl = document.getElementById('correction-modal-input');
+                const warningEl = document.getElementById('correction-modal-warning');
+                const confirmBtn = document.getElementById('correction-modal-confirm-btn');
+                const raw = (inputEl?.value || '').trim();
+                const correctedAmount = parseFloat(raw.replace(',', '.'));
+
+                if (raw === '' || isNaN(correctedAmount) || correctedAmount < 0) {
+                    showToast("Ungültiger Betrag – bitte eine gültige, positive Zahl eingeben.", true);
+                    return;
+                }
+
+                const cases = await ProofMedStorage.getCases();
+                const c = cases.find(x => x.id === correctionModalCaseId);
+                if (!c) { closeCorrectionModal(); return; }
+
+                if (correctedAmount > (c.originalAmount || 0) && !correctionModalOverAmountAcknowledged) {
+                    correctionModalOverAmountAcknowledged = true;
+                    if (warningEl) {
+                        warningEl.textContent = `Achtung: ${correctedAmount.toFixed(2)} € liegt über dem ursprünglichen Betrag (${(c.originalAmount || 0).toFixed(2)} €). Erneut klicken, um trotzdem zu übernehmen.`;
+                        warningEl.classList.remove('hidden');
+                    }
+                    if (confirmBtn) confirmBtn.textContent = 'Trotzdem übernehmen';
+                    return;
+                }
+
+                const caseId = correctionModalCaseId;
+                const resolved = await resolveCaseWithCorrectedAmount(caseId, correctedAmount);
+                closeCorrectionModal();
+                if (resolved) {
+                    showToast(`Fall als korrigiert markiert! Ersparnis: ${(resolved.savedAmount || 0).toFixed(2)} €`);
+                }
+            } catch (e) {
+                console.error("confirmCorrectionModal error:", e);
+                showToast("Fehler beim Aktualisieren des Falls: " + (e.message || e), true);
+            }
+        }
+        window.confirmCorrectionModal = confirmCorrectionModal;
+
+        // Normalizes a practice/provider name for case matching (case/whitespace-insensitive).
+        function normalizePracticeName(name) {
+            return String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        }
+        window.normalizePracticeName = normalizePracticeName;
+
+        // Looks for exactly one high-confidence FROZEN case that a freshly-scanned GREEN
+        // invoice could be the correction for. This is a workflow-association heuristic, not
+        // a legal or medical verification — it never resolves anything itself (see the
+        // proposal UI below, which still requires an explicit user confirmation).
+        //
+        // Required (baseline filter, ALL must hold):
+        //  - case.status === 'FROZEN'
+        //  - normalized practice name matches exactly
+        //  - treatment date matches, whenever both the case and the new scan have one
+        // If the baseline filter yields anything other than exactly one candidate, this
+        // returns null — ambiguous (zero or multiple) matches are never auto-proposed.
+        //
+        // Confidence signal (at least one required on top of the baseline filter):
+        //  - a "KORRIGIERT"/"KORRIGIERTE"/"KORREKTUR" marker was detected in the scanned text
+        //  - the newly scanned total differs from the case's original amount
+        // GOÄ-position overlap is listed as a possible signal, but the case model does not
+        // currently persist the original invoice's GOÄ codes (only originalAmount) — that
+        // signal cannot be computed here, so it is intentionally omitted rather than faked.
+        function findCorrectionCandidateCase(cases, { practice, date, totalClaimed, hasCorrectionMarker }) {
+            const normPractice = normalizePracticeName(practice);
+            const baseline = (cases || []).filter(c => {
+                if (c.status !== 'FROZEN') return false;
+                if (normalizePracticeName(c.doctorName) !== normPractice) return false;
+                if (date && c.invoiceDate && c.invoiceDate !== date) return false;
+                return true;
+            });
+
+            if (baseline.length !== 1) return null;
+
+            const candidate = baseline[0];
+            const amountDiffers = typeof totalClaimed === 'number'
+                && typeof candidate.originalAmount === 'number'
+                && Math.abs(totalClaimed - candidate.originalAmount) > 0.005;
+
+            if (!hasCorrectionMarker && !amountDiffers) return null;
+
+            return candidate;
+        }
+        window.findCorrectionCandidateCase = findCorrectionCandidateCase;
+
+        // Renders (or hides) the correction-match proposal card below a GREEN audit result.
+        // Never resolves anything on its own — "Korrektur übernehmen" still requires an
+        // explicit click, and "Nicht zuordnen" just hides the card without touching any data.
+        function renderCorrectionProposal(matchedCase, scanTotal) {
+            const card = document.getElementById('correction-proposal-card');
+            const body = document.getElementById('correction-proposal-body');
+            if (!card || !body) return;
+
+            if (!matchedCase) {
+                card.classList.add('hidden');
+                body.innerHTML = '';
+                delete card.dataset.caseId;
+                delete card.dataset.correctedAmount;
+                return;
+            }
+
+            const original = matchedCase.originalAmount || 0;
+            const savings = Math.max(0, original - scanTotal);
+
+            body.innerHTML = `
+                <div class="font-semibold text-white">${matchedCase.doctorName}</div>
+                <div class="flex items-center justify-between text-slate-300">
+                    <span>Ursprüngliche Rechnung:</span>
+                    <span class="text-slate-400 line-through">${original.toFixed(2)} €</span>
+                </div>
+                <div class="flex items-center justify-between text-slate-300">
+                    <span>Korrigierte Rechnung:</span>
+                    <span class="text-white font-bold">${scanTotal.toFixed(2)} €</span>
+                </div>
+                <div class="flex items-center justify-between border-t border-slate-800 pt-2">
+                    <span class="text-emerald-300 font-semibold">Voraussichtliche Ersparnis:</span>
+                    <span class="text-emerald-400 font-bold">${savings.toFixed(2)} €</span>
+                </div>
+            `;
+
+            card.dataset.caseId = matchedCase.id;
+            card.dataset.correctedAmount = String(scanTotal);
+            card.classList.remove('hidden');
+        }
+        window.renderCorrectionProposal = renderCorrectionProposal;
+
+        function dismissCorrectionProposal() {
+            renderCorrectionProposal(null);
+        }
+        window.dismissCorrectionProposal = dismissCorrectionProposal;
+
+        async function confirmCorrectionProposal() {
+            try {
+                const card = document.getElementById('correction-proposal-card');
+                const caseId = card?.dataset.caseId;
+                const correctedAmount = parseFloat(card?.dataset.correctedAmount);
+                if (!caseId || isNaN(correctedAmount)) return;
+
+                const resolved = await resolveCaseWithCorrectedAmount(caseId, correctedAmount);
+                dismissCorrectionProposal();
+                if (resolved) {
+                    showToast(`Korrektur übernommen! Ersparnis: ${(resolved.savedAmount || 0).toFixed(2)} €`);
+                }
+            } catch (e) {
+                console.error("confirmCorrectionProposal error:", e);
+                showToast("Fehler beim Übernehmen der Korrektur: " + (e.message || e), true);
+            }
+        }
+        window.confirmCorrectionProposal = confirmCorrectionProposal;
+
+        // Checks a fresh GREEN audit result against open FROZEN cases and shows the
+        // correction-match proposal when exactly one high-confidence candidate exists. Never
+        // called for non-GREEN results, and never resolves a case by itself (Phase 4/7: this
+        // is a workflow-association heuristic, not an automatic legal/medical determination).
+        async function checkForCorrectionMatch(practice, date, totalClaimed, hasCorrectionMarker) {
+            try {
+                const cases = await ProofMedStorage.getCases();
+                const match = findCorrectionCandidateCase(cases, { practice, date, totalClaimed, hasCorrectionMarker });
+                renderCorrectionProposal(match, totalClaimed);
+            } catch (e) {
+                console.warn("Correction match check failed (non-fatal):", e);
+                renderCorrectionProposal(null);
+            }
+        }
+        window.checkForCorrectionMatch = checkForCorrectionMatch;
 
         // Splits text into non-empty lines and rejoins with a double CRLF between every
         // one — paragraphs AND list items alike — so webmail providers (WEB.DE, GMX,
@@ -3278,12 +3527,15 @@
         }
         window.renderCasesDossier = renderCasesDossier;
 
-        async function displayAuditResults(sourceName, date, practice, codes, totalClaimed, issues, matchedLog, auditedTotal = null) {
+        async function displayAuditResults(sourceName, date, practice, codes, totalClaimed, issues, matchedLog, auditedTotal = null, hasCorrectionMarker = false) {
             const resultCard = document.getElementById('result-status-card');
             const resultSection = document.getElementById('audit-result');
             const objectionCard = document.getElementById('objection-card');
 
             resultSection?.classList.remove('hidden');
+            // Reset any stale correction-match proposal from a previous scan before deciding
+            // (below) whether this new result should show one.
+            renderCorrectionProposal(null);
 
             const hasError = issues.some(i => i.severity === 'ERROR');
             const hasWarn = issues.some(i => i.severity === 'WARN');
@@ -3398,6 +3650,7 @@
                 }
             } else {
                 objectionCard?.classList.add('hidden');
+                await checkForCorrectionMatch(practice, date, totalClaimed, hasCorrectionMarker);
             }
         }
 
