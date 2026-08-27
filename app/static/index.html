@@ -738,7 +738,10 @@
                     vaultPin: getVal('profile-vault-pin'),
                     isConfigured: !!(fullName && address),
                 };
+                console.log("[saveProfile] saving profile:", profile);
                 await ProofMedStorage.setProfile(profile);
+                const verify = await ProofMedStorage.getProfile();
+                console.log("[saveProfile] verified read-back after save:", verify);
                 closeProfileModal();
                 await updateProfileBanner();
                 showToast("Profil gespeichert!");
@@ -993,7 +996,7 @@
             bar.classList.remove('hidden');
             if (countEl) countEl.textContent = selectedKeys.length;
 
-            let totalPrice = 0;
+            let totalCents = 0;
             container.innerHTML = '';
 
             selectedKeys.forEach(code => {
@@ -1002,7 +1005,7 @@
 
                 const factor = selectedGOACodes[code];
                 const itemPrice = item.rate1x * factor;
-                totalPrice += itemPrice;
+                totalCents += Math.round(itemPrice * 100);
 
                 const allowedFactors = item.type === 'personal' ? [1.0, 2.3, 3.5] : item.type === 'technical' ? [1.0, 1.8, 2.5] : [1.0];
 
@@ -1025,7 +1028,7 @@
                 container.appendChild(tag);
             });
 
-            if (priceEl) priceEl.textContent = totalPrice.toFixed(2) + ' €';
+            if (priceEl) priceEl.textContent = (totalCents / 100).toFixed(2) + ' €';
         }
 
         function handleLiveCheckinStart() {
@@ -1206,129 +1209,137 @@
             },
 
             async getItem(key) {
-                try {
-                    await this.init();
-                    if (this.isCapacitor && this.sqliteConn) {
-                        const sql = "SELECT value FROM proofmed_storage WHERE key = ?;";
+                await this.init();
+                if (this.isCapacitor && this.sqliteConn) {
+                    const sql = "SELECT value FROM proofmed_storage WHERE key = ?;";
+                    try {
                         if (this.sqliteConn.query) {
-                            const res = await this.sqliteConn.query({ statement: sql, values: [key] }).catch(() => null);
-                            if (res && res.values && res.values.length > 0) {
-                                return res.values[0].value;
-                            }
-                            return null;
+                            const res = await this.sqliteConn.query({ statement: sql, values: [key] });
+                            const val = (res && res.values && res.values.length > 0) ? res.values[0].value : null;
+                            console.log(`[ProofMedStorage] getItem(${key}) via SQLite:`, val);
+                            return val;
                         } else if (window.Capacitor?.Plugins?.CapacitorSQLite?.query) {
                             const res = await window.Capacitor.Plugins.CapacitorSQLite.query({
                                 database: "proofmed.db",
                                 statement: sql,
                                 values: [key]
-                            }).catch(() => null);
-                            if (res && res.values && res.values.length > 0) {
-                                return res.values[0].value;
-                            }
-                            return null;
+                            });
+                            const val = (res && res.values && res.values.length > 0) ? res.values[0].value : null;
+                            console.log(`[ProofMedStorage] getItem(${key}) via SQLite plugin:`, val);
+                            return val;
                         } else if (this.sqliteConn.transaction) {
-                            return new Promise((resolve) => {
+                            const val = await new Promise((resolve, reject) => {
                                 try {
                                     this.sqliteConn.transaction(tx => {
                                         tx.executeSql(sql, [key], (tx, rs) => {
-                                            if (rs && rs.rows && rs.rows.length > 0) {
-                                                resolve(rs.rows.item(0).value);
-                                            } else {
-                                                resolve(null);
-                                            }
-                                        }, () => resolve(null));
-                                    }, () => resolve(null));
+                                            resolve(rs && rs.rows && rs.rows.length > 0 ? rs.rows.item(0).value : null);
+                                        }, (tx, err) => reject(err));
+                                    }, (err) => reject(err));
                                 } catch (txErr) {
-                                    resolve(null);
+                                    reject(txErr);
                                 }
                             });
+                            console.log(`[ProofMedStorage] getItem(${key}) via WebSQL:`, val);
+                            return val;
                         }
+                    } catch (err) {
+                        console.error(`[ProofMedStorage] getItem(${key}) SQLite FAILED, falling back to localStorage:`, err);
+                        // fall through to localStorage below — never silently discard a read failure
                     }
-                } catch (err) {
-                    console.warn("Storage getItem fallback to localStorage:", err);
                 }
                 try {
-                    return typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null;
+                    const val = typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null;
+                    console.log(`[ProofMedStorage] getItem(${key}) via localStorage:`, val);
+                    return val;
                 } catch (e) {
+                    console.error(`[ProofMedStorage] getItem(${key}) localStorage FAILED:`, e);
                     return null;
                 }
             },
 
             async setItem(key, value) {
-                try {
-                    await this.init();
-                    if (this.isCapacitor && this.sqliteConn) {
-                        const sql = "INSERT OR REPLACE INTO proofmed_storage (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP);";
+                await this.init();
+                if (this.isCapacitor && this.sqliteConn) {
+                    const sql = "INSERT OR REPLACE INTO proofmed_storage (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP);";
+                    try {
                         if (this.sqliteConn.run) {
-                            await this.sqliteConn.run({ statement: sql, values: [key, value] }).catch(() => null);
+                            await this.sqliteConn.run({ statement: sql, values: [key, value] });
+                            console.log(`[ProofMedStorage] setItem(${key}) via SQLite: OK`);
                             return;
                         } else if (window.Capacitor?.Plugins?.CapacitorSQLite?.run) {
                             await window.Capacitor.Plugins.CapacitorSQLite.run({
                                 database: "proofmed.db",
                                 statement: sql,
                                 values: [key, value]
-                            }).catch(() => null);
+                            });
+                            console.log(`[ProofMedStorage] setItem(${key}) via SQLite plugin: OK`);
                             return;
                         } else if (this.sqliteConn.transaction) {
-                            return new Promise((resolve) => {
+                            await new Promise((resolve, reject) => {
                                 try {
                                     this.sqliteConn.transaction(tx => {
-                                        tx.executeSql(sql, [key, value], () => resolve(), () => resolve());
-                                    }, () => resolve(), () => resolve());
+                                        tx.executeSql(sql, [key, value], () => resolve(), (tx, err) => reject(err));
+                                    }, (err) => reject(err));
                                 } catch (txErr) {
-                                    resolve();
+                                    reject(txErr);
                                 }
                             });
+                            console.log(`[ProofMedStorage] setItem(${key}) via WebSQL: OK`);
+                            return;
                         }
+                    } catch (err) {
+                        console.error(`[ProofMedStorage] setItem(${key}) SQLite FAILED, falling back to localStorage:`, err);
+                        // fall through to localStorage below — never silently discard a write failure
                     }
-                } catch (err) {
-                    console.warn("Storage setItem fallback to localStorage:", err);
                 }
                 try {
                     if (typeof localStorage !== 'undefined') {
                         localStorage.setItem(key, value);
+                        console.log(`[ProofMedStorage] setItem(${key}) via localStorage: OK`);
                     }
                 } catch (e) {
-                    console.error("localStorage setItem error:", e);
+                    console.error(`[ProofMedStorage] setItem(${key}) localStorage FAILED:`, e);
                 }
             },
 
             async removeItem(key) {
-                try {
-                    await this.init();
-                    if (this.isCapacitor && this.sqliteConn) {
-                        const sql = "DELETE FROM proofmed_storage WHERE key = ?;";
+                await this.init();
+                if (this.isCapacitor && this.sqliteConn) {
+                    const sql = "DELETE FROM proofmed_storage WHERE key = ?;";
+                    try {
                         if (this.sqliteConn.run) {
-                            await this.sqliteConn.run({ statement: sql, values: [key] }).catch(() => null);
+                            await this.sqliteConn.run({ statement: sql, values: [key] });
                             return;
                         } else if (window.Capacitor?.Plugins?.CapacitorSQLite?.run) {
                             await window.Capacitor.Plugins.CapacitorSQLite.run({
                                 database: "proofmed.db",
                                 statement: sql,
                                 values: [key]
-                            }).catch(() => null);
+                            });
                             return;
                         } else if (this.sqliteConn.transaction) {
-                            return new Promise((resolve) => {
+                            await new Promise((resolve, reject) => {
                                 try {
                                     this.sqliteConn.transaction(tx => {
-                                        tx.executeSql(sql, [key], () => resolve(), () => resolve());
-                                    }, () => resolve(), () => resolve());
+                                        tx.executeSql(sql, [key], () => resolve(), (tx, err) => reject(err));
+                                    }, (err) => reject(err));
                                 } catch (txErr) {
-                                    resolve();
+                                    reject(txErr);
                                 }
                             });
+                            return;
                         }
+                    } catch (err) {
+                        console.error(`[ProofMedStorage] removeItem(${key}) SQLite FAILED, falling back to localStorage:`, err);
+                        // fall through to localStorage below
                     }
-                } catch (err) {
-                    console.warn("Storage removeItem fallback to localStorage:", err);
                 }
                 try {
                     if (typeof localStorage !== 'undefined') {
                         localStorage.removeItem(key);
                     }
                 } catch (e) {
-                    console.error("localStorage removeItem error:", e);
+                    console.error(`[ProofMedStorage] removeItem(${key}) localStorage FAILED:`, e);
                 }
             },
 
@@ -1449,8 +1460,13 @@
                     const raw = await this.getItem('proofmed_profile');
                     if (raw) {
                         const parsed = JSON.parse(raw);
-                        if (parsed && typeof parsed === 'object') return { ...defaults, ...parsed };
+                        if (parsed && typeof parsed === 'object') {
+                            const result = { ...defaults, ...parsed };
+                            console.log("[ProofMedStorage] getProfile() ->", result);
+                            return result;
+                        }
                     }
+                    console.log("[ProofMedStorage] getProfile() -> no stored profile, returning defaults", defaults);
                     return defaults;
                 } catch (e) {
                     console.warn("Fehler beim Laden/Parsen des Profils, Fallback auf localStorage:", e);
@@ -1458,10 +1474,15 @@
                         const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('proofmed_profile') : null;
                         if (raw) {
                             const parsed = JSON.parse(raw);
-                            if (parsed && typeof parsed === 'object') return { ...defaults, ...parsed };
+                            if (parsed && typeof parsed === 'object') {
+                                const result = { ...defaults, ...parsed };
+                                console.log("[ProofMedStorage] getProfile() localStorage fallback ->", result);
+                                return result;
+                            }
                         }
                         return defaults;
                     } catch (err) {
+                        console.error("[ProofMedStorage] getProfile() localStorage fallback FAILED:", err);
                         return defaults;
                     }
                 }
@@ -1470,13 +1491,17 @@
             async setProfile(profile) {
                 try {
                     await this.setItem('proofmed_profile', JSON.stringify(profile || {}));
+                    console.log("[ProofMedStorage] setProfile() saved:", profile);
                 } catch (e) {
                     console.error("Fehler beim Speichern des Profils:", e);
                     try {
                         if (typeof localStorage !== 'undefined') {
                             localStorage.setItem('proofmed_profile', JSON.stringify(profile || {}));
+                            console.log("[ProofMedStorage] setProfile() localStorage fallback saved:", profile);
                         }
-                    } catch (err) {}
+                    } catch (err) {
+                        console.error("[ProofMedStorage] setProfile() localStorage fallback FAILED:", err);
+                    }
                 }
             }
         };
@@ -2001,6 +2026,35 @@
          * 3. Fallback for scanned PDFs: Renders Page 1 to an HTML5 Canvas (scale 2.0)
          *    and passes the canvas context to Tesseract.recognize().
          */
+        // Reconstructs visually-ordered text lines from PDF.js text items using their
+        // transform (x/y) positions, instead of flattening items in raw content-stream
+        // order. A plain items.map(i => i.str).join(' ') destroys invoice table row
+        // structure — every column of every row lands on one giant line with no way to
+        // tell rows apart. This groups items into lines by Y proximity (small tolerance,
+        // since a single printed line can have sub-pixel Y jitter), sorts each line
+        // left-to-right by X, and returns one string per visual line, top to bottom.
+        function reconstructPdfTextLines(items) {
+            const Y_TOLERANCE = 3;
+            const nonEmpty = (items || []).filter(it => it && it.str && it.str.trim() && Array.isArray(it.transform));
+            const byY = [...nonEmpty].sort((a, b) => b.transform[5] - a.transform[5]);
+            const lines = [];
+            byY.forEach(it => {
+                const y = it.transform[5];
+                let line = lines.find(l => Math.abs(l.y - y) <= Y_TOLERANCE);
+                if (!line) {
+                    line = { y, items: [] };
+                    lines.push(line);
+                }
+                line.items.push(it);
+            });
+            return lines.map(l => l.items
+                .sort((a, b) => a.transform[4] - b.transform[4])
+                .map(it => it.str)
+                .join(' ')
+            );
+        }
+        window.reconstructPdfTextLines = reconstructPdfTextLines;
+
         async function processPDFDocument(file, onProgress) {
             let extractedText = '';
             try {
@@ -2008,7 +2062,7 @@
 
                 if (typeof pdfjsLib === 'undefined' && typeof window.pdfjsLib === 'undefined') {
                     console.warn("PDF.js library not loaded, falling back to direct OCR.");
-                    return '';
+                    return { text: '', isDigital: false };
                 }
 
                 const pdfLib = window.pdfjsLib || pdfjsLib;
@@ -2021,13 +2075,14 @@
                 const numPages = pdf.numPages || 1;
                 const maxPages = Math.min(numPages, 5);
 
-                // Pass 1: Extract embedded digital text
+                // Pass 1: Extract embedded digital text, reconstructed into visual lines
+                // (see reconstructPdfTextLines above) so table rows survive intact.
                 let embeddedText = '';
                 for (let i = 1; i <= maxPages; i++) {
                     if (onProgress) onProgress(15 + Math.round((i / maxPages) * 20), `PDF Seite ${i}/${maxPages} analysieren...`);
                     const page = await pdf.getPage(i);
                     const textContent = await page.getTextContent();
-                    const pageText = (textContent.items || []).map(item => item.str).join(' ');
+                    const pageText = reconstructPdfTextLines(textContent.items).join('\n');
                     if (pageText.trim()) {
                         embeddedText += `\n--- Seite ${i} ---\n` + pageText;
                     }
@@ -2036,7 +2091,7 @@
                 // If extracted text length > 30 characters, return extracted string directly
                 if (embeddedText.replace(/\s+/g, '').length > 30 || embeddedText.trim().length > 30) {
                     console.log("PDF.js: Raw embedded digital text successfully extracted (> 30 characters).");
-                    return embeddedText;
+                    return { text: embeddedText, isDigital: true };
                 }
 
                 // Pass 2: Fallback for scanned PDFs -> Render Page 1 to HTML5 Canvas (scale 2.0) and pass canvas to Tesseract.recognize()
@@ -2072,7 +2127,7 @@
             } catch (pdfErr) {
                 console.warn("PDF processing exception handled:", pdfErr);
             }
-            return extractedText;
+            return { text: extractedText, isDigital: false };
         }
         window.processPDFDocument = processPDFDocument;
 
@@ -2460,10 +2515,12 @@
             text = text.replace(/GOE\b/gi, 'GOÄ');
             text = text.replace(/\bGO\s*(?=(?:\d{1,4}|[A-D]|K1)\b)/gi, 'GOÄ ');
 
-            // 2. Replace Ziffer / Nr. / Pos (with or without a trailing period) with GOÄ.
-            // "Nr" keeps its required period — unlike "Pos", it's ambiguous with unrelated
-            // reference numbers (Rechnungs-Nr., Kunden-Nr.) that must never become GOÄ codes.
-            text = text.replace(/\b(?:Ziffer|Nr\.|Pos\.?)\s*/gi, 'GOÄ ');
+            // 2. Replace Ziffer / Pos (with or without a trailing period) with GOÄ. "Nr." is
+            // deliberately NOT folded here — it's far too generic (Rechnungs-Nr., Patienten-Nr.,
+            // Kunden-Nr., Auftrags-Nr. all use it) and previously caused document/invoice
+            // reference numbers (e.g. "Privatliquidation Nr. 2026-8941") to be misread as a
+            // GOÄ code.
+            text = text.replace(/\b(?:Ziffer|Pos\.?)\s*/gi, 'GOÄ ');
 
             // 3. Fix digit confusions: 25O -> 250, 65O -> 650, 2OO -> 200, 2OO6 -> 2006, 41O -> 410, 42O -> 420
             text = text.replace(/\b25[Oo]\b/g, '250');
@@ -2548,15 +2605,18 @@
 
                 let extractedText = '';
                 let ocrSuccess = false;
+                let isDigitalPdfText = false;
 
                 if (isPDF) {
                     updateOCRStatus(true, "PDF-Dokument wird analysiert...", 15);
                     updateToastProgress("PDF-Text & Seiten werden geladen...");
 
-                    extractedText = await processPDFDocument(file, (pct, status) => {
+                    const pdfResult = await processPDFDocument(file, (pct, status) => {
                         updateOCRStatus(true, status, pct);
                         updateToastProgress(status);
                     });
+                    extractedText = pdfResult?.text || '';
+                    isDigitalPdfText = pdfResult?.isDigital === true;
 
                     if (extractedText && extractedText.trim().length > 0) {
                         ocrSuccess = true;
@@ -2611,7 +2671,7 @@
                 console.log("Extracted raw text:", extractedText);
 
                 // 3. Pass extracted text (or filename fallback) to parseOCRAndAudit
-                await parseOCRAndAudit(extractedText, fileName);
+                await parseOCRAndAudit(extractedText, fileName, isDigitalPdfText);
 
             } catch (fatalErr) {
                 console.error("handleFileUpload exception safely caught:", fatalErr);
@@ -2627,7 +2687,7 @@
         }
         window.handleFileUpload = handleFileUpload;
 
-        async function parseOCRAndAudit(rawText, sourceName) {
+        async function parseOCRAndAudit(rawText, sourceName, isDigitalPdfText = false) {
             try {
                 const text = rawText || '';
                 const fname = sourceName || 'rechnung.pdf';
@@ -2684,10 +2744,15 @@
                     // Note: no \b after €/EUR — € is a non-word char, so \b never matches when
                     // followed by whitespace/newline/end. A negative lookahead is used instead.
                     const hasAmount = /\d+[.,]\d{2}\s*(?:€|EUR)(?![a-zA-Z0-9])/i.test(trimmedLine);
-                    if (!hasFactor && !hasAmount) return;
+                    // Digital-PDF table rows commonly print bare column values ("2.3", "10.72")
+                    // with no "x" suffix or €/EUR unit — a leading date column ("20.08.2026 1
+                    // Symptombezogene ...") is itself strong evidence of a genuine invoice
+                    // position row in a reconstructed table line, so it opens the gate too.
+                    const hasDigitalRowShape = isDigitalPdfText && /^\d{1,2}[./]\d{1,2}[./]\d{2,4}\s/.test(trimmedLine);
+                    if (!hasFactor && !hasAmount && !hasDigitalRowShape) return;
 
                     // a) Standard identifier: GOÄ (normalizeOCRText already folds GOA/G0A/GOE/GO/
-                    // Ziffer/Nr./Pos into GOÄ). A single stray punctuation mark between the label
+                    // Ziffer/Pos into GOÄ). A single stray punctuation mark between the label
                     // and the code (e.g. "GOÄ.3", "GOÄ:3" from noisy OCR) is tolerated, but the
                     // code must still immediately follow — no unrelated words in between.
                     const idMatches = [...trimmedLine.matchAll(/\bGOÄ\s*[:.\-]?\s*([0-9]{1,4}|[A-D]|K1)\b/gi)];
@@ -2704,6 +2769,33 @@
                         const segment = trimmedLine.slice(sm.index + sm[0].length, segEnd);
                         addCode(sm[1], extractFactor(segment) || 1.0);
                     });
+
+                    // c) Table-structural fallback — digital PDF text only. Line reconstruction
+                    // (reconstructPdfTextLines) preserves column order, but most real invoices
+                    // never repeat a "GOÄ"/"Ziffer" label per row, only once in the header — so
+                    // a reconstructed row like "20.08.2026 1 Symptombezogene Untersuchung 2.3
+                    // 10.72" carries no identifier for (a) to match. When no label matched on
+                    // this line, treat the token right after a leading date column as the code
+                    // candidate — a date, invoice number, factor or amount can never take this
+                    // shape (hyphenated/decimal tokens are rejected outright by the pattern
+                    // below), and this line already had to pass the hasFactor/hasAmount/
+                    // hasDigitalRowShape gate above to be reached at all, so the row itself is
+                    // already confirmed to be a priced line item. A GOA_CATALOG match is a
+                    // confidence signal, not a requirement — the catalog is a curated subset,
+                    // not the full official GOÄ number range, so an unlisted-but-structurally-
+                    // valid code is still accepted (never silently discarded), same as the
+                    // label-based path (a) already does.
+                    if (isDigitalPdfText && idMatches.length === 0) {
+                        const tokens = trimmedLine.split(/\s+/).filter(Boolean);
+                        const dateTokenRe = /^\d{1,2}[./]\d{1,2}[./]\d{2,4}$|^\d{4}-\d{2}-\d{2}$/;
+                        const codeIdx = dateTokenRe.test(tokens[0]) ? 1 : 0;
+                        const candidate = tokens[codeIdx];
+                        if (candidate && /^(?:[0-9]{1,4}|[A-D]|K1)$/i.test(candidate)) {
+                            const c = /^\d+$/.test(candidate) ? String(parseInt(candidate, 10)) : candidate.toUpperCase();
+                            const restOfLine = tokens.slice(codeIdx + 1).join(' ');
+                            addCode(c, extractFactor(restOfLine));
+                        }
+                    }
                 });
 
                 // Fallback from filename if OCR yielded no codes at all
@@ -2840,7 +2932,7 @@
         async function runAuditEngine(date, practice, codes, factors, sourceName, extractedTotal = null) {
             try {
                 const issues = [];
-                let computedTotal = 0;
+                let computedTotalCents = 0;
                 let totalRequiredDuration = 0;
 
                 (codes || []).forEach(code => {
@@ -2849,7 +2941,7 @@
 
                     const factor = factors[code] || item.defaultFactor || 2.3;
                     let price = item.rate1x * factor;
-                    computedTotal += price;
+                    computedTotalCents += Math.round(price * 100);
                     totalRequiredDuration += (item.minDuration || 0);
 
                     if (item.type === 'personal' && factor > 2.3 && factor <= 3.5) {
@@ -2885,6 +2977,12 @@
                         });
                     }
                 }
+
+                // Each position is rounded to cents individually and summed as integer cents
+                // (computedTotalCents above) rather than summing unrounded float products and
+                // rounding once at the end — matching how the invoice's own total was built and
+                // avoiding the ±1-cent drift that "sum-then-round" produces.
+                const computedTotal = computedTotalCents / 100;
 
                 // The actual amount claimed on the invoice is the primary Gesamtbetrag whenever
                 // OCR could extract one; the sum of selected GOÄ codes is only a fallback (e.g.
