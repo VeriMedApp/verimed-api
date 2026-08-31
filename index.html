@@ -2740,10 +2740,11 @@
 
                 const extractedCodes = [];
                 const factors = {};
+                const invoicePositions = []; // NEW: structured position data: { date, code, description, factor, invoiceAmount }
                 const knownCodes = Object.keys(GOA_CATALOG);
 
-                // Helper to add unique codes
-                const addCode = (rawCode, factor = null) => {
+                // Helper to add unique codes with optional position data
+                const addCode = (rawCode, factor = null, positionData = null) => {
                     if (!rawCode) return;
                     let c = String(rawCode).trim().toUpperCase();
                     if (/^\d+$/.test(c)) c = String(parseInt(c, 10));
@@ -2752,6 +2753,12 @@
                     }
                     if (factor !== null && !isNaN(factor) && factor > 0 && factor <= 10 && !factors[c]) {
                         factors[c] = factor;
+                    }
+                    // Store structured position data if provided
+                    // NOTE: invoicePositions represents actual invoice rows — no deduplication,
+                    // same code can legitimately appear multiple times on same date
+                    if (positionData) {
+                        invoicePositions.push({ code: c, ...positionData });
                     }
                 };
 
@@ -2835,7 +2842,64 @@
                         if (candidate && /^(?:[0-9]{1,4}|[A-D]|K1)$/i.test(candidate)) {
                             const c = /^\d+$/.test(candidate) ? String(parseInt(candidate, 10)) : candidate.toUpperCase();
                             const restOfLine = tokens.slice(codeIdx + 1).join(' ');
-                            addCode(c, extractFactor(restOfLine));
+                            const factor = extractFactor(restOfLine);
+
+                            // NEW: Extract structured position data from digital PDF row
+                            // Parse right-to-left: amount → factor → description → code → date
+                            let positionData = null;
+                            if (dateTokenRe.test(tokens[0])) {
+                                const dateStr = tokens[0];
+                                const dateMatch = dateStr.match(/(\d{1,2})[./](\d{1,2})[./](\d{4})/);
+                                if (dateMatch) {
+                                    const [, day, month, year] = dateMatch;
+                                    const position_date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+
+                                    // Right-to-left: Extract trailing invoice amount (last currency-like token)
+                                    let invoiceAmount = null;
+                                    let amountTokenIdx = -1;
+                                    for (let i = tokens.length - 1; i > codeIdx; i--) {
+                                        if (/^\d+[.,]\d{2}$/.test(tokens[i])) {
+                                            invoiceAmount = parseFloat(tokens[i].replace(',', '.'));
+                                            amountTokenIdx = i;
+                                            break;
+                                        }
+                                    }
+
+                                    // Next: find factor token (immediately before amount)
+                                    let parsedFactor = null;
+                                    let factorTokenIdx = -1;
+                                    if (amountTokenIdx > codeIdx) {
+                                        for (let i = amountTokenIdx - 1; i > codeIdx; i--) {
+                                            if (/^[\d,.]+(x|×|-fach|fach)?$/i.test(tokens[i])) {
+                                                const fm = tokens[i].match(/(\d+(?:[.,]\d+)?)\s*(?:x|×|-fach|fach)?/i);
+                                                if (fm) {
+                                                    const pf = parseFloat(fm[1].replace(',', '.'));
+                                                    if (!isNaN(pf) && pf > 0 && pf <= 10) {
+                                                        parsedFactor = pf;
+                                                        factorTokenIdx = i;
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Description: all tokens between code and factor (or between code and amount if no factor)
+                                    const descEnd = factorTokenIdx > codeIdx ? factorTokenIdx : (amountTokenIdx > codeIdx ? amountTokenIdx : tokens.length);
+                                    const descriptionTokens = tokens.slice(codeIdx + 1, descEnd);
+                                    const description = descriptionTokens.length > 0 ? descriptionTokens.join(' ').trim() : null;
+
+                                    // invoicePositions must use actual parsed factor, not catalog default
+                                    positionData = {
+                                        date: position_date,
+                                        description: description,
+                                        factor: parsedFactor,
+                                        invoiceAmount: invoiceAmount
+                                    };
+                                }
+                            }
+
+                            addCode(c, factor, positionData);
                         }
                     }
                 });
@@ -2949,7 +3013,7 @@
                 const hasCorrectionMarker = /\bKORRIGIERT(E)?\b|\bKORREKTUR\b/i.test(normalizedText);
 
                 // Automatically invoke runAuditEngine()
-                await runAuditEngine(invoiceDate, practiceName, extractedCodes, factors, fname, invoiceTotal, hasCorrectionMarker);
+                await runAuditEngine(invoiceDate, practiceName, extractedCodes, factors, fname, invoiceTotal, hasCorrectionMarker, invoicePositions);
             } catch (err) {
                 console.error("parseOCRAndAudit error:", err);
                 showToast("Fehler bei der Rechnungsanalyse: " + (err.message || err), true);
@@ -2977,7 +3041,7 @@
         }
         window.runManualAudit = runManualAudit;
 
-        async function runAuditEngine(date, practice, codes, factors, sourceName, extractedTotal = null, hasCorrectionMarker = false) {
+        async function runAuditEngine(date, practice, codes, factors, sourceName, extractedTotal = null, hasCorrectionMarker = false, invoicePositions = []) {
             try {
                 const issues = [];
                 let computedTotalCents = 0;
