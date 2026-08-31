@@ -339,9 +339,9 @@
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
                             <span>Kombi-PDF teilen</span>
                         </button>
-                        <button onclick="printObjectionPDF()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs py-2.5 rounded-xl shadow transition-all flex items-center justify-center space-x-1.5">
-                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
-                            <span>PDF drucken</span>
+                        <button onclick="previewObjectionPDF()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs py-2.5 rounded-xl shadow transition-all flex items-center justify-center space-x-1.5">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                            <span>Einwand als PDF ansehen</span>
                         </button>
                     </div>
 
@@ -3521,17 +3521,17 @@
             }
             bar.classList.remove('hidden');
             bar.innerHTML = `
-                <div class="glass-card p-3.5 rounded-xl border-slate-800 text-center">
-                    <div class="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Ursprüngliche Liquidationen</div>
-                    <div class="text-lg font-black text-white mt-1">${s.originalSum.toFixed(2)} €</div>
+                <div class="glass-card p-2.5 sm:p-3.5 rounded-xl border-slate-800 text-center min-w-0">
+                    <div class="text-[9px] sm:text-[10px] text-slate-400 font-medium uppercase tracking-tight sm:tracking-wide leading-tight break-words">Ursprüngliche Liquidationen</div>
+                    <div class="text-base sm:text-lg font-black text-white mt-1">${s.originalSum.toFixed(2)} €</div>
                 </div>
-                <div class="glass-card p-3.5 rounded-xl border-slate-800 text-center">
-                    <div class="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Regulierter Endbetrag</div>
-                    <div class="text-lg font-black text-white mt-1">${s.settledSum.toFixed(2)} €</div>
+                <div class="glass-card p-2.5 sm:p-3.5 rounded-xl border-slate-800 text-center min-w-0">
+                    <div class="text-[9px] sm:text-[10px] text-slate-400 font-medium uppercase tracking-tight sm:tracking-wide leading-tight break-words">Regulierter Endbetrag</div>
+                    <div class="text-base sm:text-lg font-black text-white mt-1">${s.settledSum.toFixed(2)} €</div>
                 </div>
-                <div class="glass-card p-3.5 rounded-xl border-emerald-500/30 bg-emerald-950/20 text-center">
-                    <div class="text-[10px] text-emerald-400 font-medium uppercase tracking-wide">Gesamtersparnis</div>
-                    <div class="text-lg font-black text-emerald-400 mt-1">${s.savingsSum.toFixed(2)} €</div>
+                <div class="glass-card p-2.5 sm:p-3.5 rounded-xl border-emerald-500/30 bg-emerald-950/20 text-center min-w-0">
+                    <div class="text-[9px] sm:text-[10px] text-emerald-400 font-medium uppercase tracking-tight sm:tracking-wide leading-tight break-words">Gesamtersparnis</div>
+                    <div class="text-base sm:text-lg font-black text-emerald-400 mt-1">${s.savingsSum.toFixed(2)} €</div>
                 </div>
             `;
         }
@@ -3782,11 +3782,54 @@
                 if (!doc) return;
 
                 const filename = buildObjectionFilename(lastAuditData.practice, lastAuditData.date);
-                const pdfBlob = doc.output('blob');
 
-                // Try the native Share Sheet (iOS/Android) with a genuine application/pdf file.
+                // Try native Capacitor Share API first (Android/iOS)
+                const platform = typeof Capacitor !== 'undefined' ? Capacitor.getPlatform() : 'web';
+                if (platform === 'android' || platform === 'ios') {
+                    try {
+                        const { Share, Filesystem } = Capacitor.Plugins;
+                        if (!Share || !Filesystem) throw new Error('Capacitor plugins not available');
+
+                        // Write PDF to cache directory
+                        const pdfData = doc.output('dataurlstring');
+                        const base64Data = pdfData.split('base64,')[1];
+
+                        const writeResult = await Filesystem.writeFile({
+                            path: filename,
+                            data: base64Data,
+                            directory: 'CACHE'
+                        });
+
+                        // Get the actual file URI for sharing
+                        const fileUri = writeResult.uri;
+                        if (!fileUri) throw new Error('No file URI returned from Filesystem.writeFile');
+
+                        console.log("Sharing file URI:", fileUri);
+
+                        // Open native share sheet with the real file
+                        await Share.share({
+                            title: 'Einwand Liquidation',
+                            text: 'Formeller Einwand zur Privatrechnung',
+                            files: [fileUri],
+                            dialogTitle: 'Einwand-PDF teilen'
+                        });
+
+                        showToast("Einwand-PDF erfolgreich geteilt!");
+                        return;
+                    } catch (nativeErr) {
+                        // Check if user cancelled (not an error)
+                        if (nativeErr.message && (nativeErr.message.includes('Abort') || nativeErr.message.includes('cancel'))) {
+                            console.log("User cancelled share");
+                            return;
+                        }
+                        console.error("Native Capacitor share failed:", nativeErr.message || nativeErr);
+                    }
+                }
+
+                // Web Share API fallback (iOS Safari, Desktop Chrome)
                 if (navigator.canShare) {
                     try {
+                        const pdfBlob = doc.output('blob');
                         const file = new File([pdfBlob], filename, { type: 'application/pdf' });
                         if (navigator.canShare({ files: [file] })) {
                             await navigator.share({
@@ -3799,11 +3842,11 @@
                         }
                     } catch (shareErr) {
                         if (shareErr.name === 'AbortError') return;
-                        console.warn("Native file share failed, falling back to download:", shareErr);
+                        console.warn("Web Share API failed, falling back to download:", shareErr);
                     }
                 }
 
-                // Fallback: trigger a genuine .pdf download directly (no HTML/print-dialog detour)
+                // Fallback: trigger a genuine .pdf download directly
                 doc.save(filename);
                 showToast("Einwand-PDF heruntergeladen!");
             } catch (err) {
@@ -3812,28 +3855,95 @@
             }
         }
 
-        async function printObjectionPDF() {
+        async function previewObjectionPDF() {
             if (!lastAuditData) return;
             try {
                 const doc = await buildObjectionPdfDoc();
                 if (!doc) return;
 
-                // Embeds a print command in the PDF itself so a capable viewer opens the print
-                // dialog automatically — the standard jsPDF idiom for a native print/export flow
-                // that still hands the user a genuine .pdf file (via the OS/browser "Save as PDF").
-                doc.autoPrint();
-                const blobUrl = doc.output('bloburl');
-                const printWindow = window.open(blobUrl, '_blank');
+                const filename = buildObjectionFilename(lastAuditData.practice, lastAuditData.date);
+                let openSuccess = false;
 
-                if (!printWindow) {
-                    // Popup blocked, or the WebView doesn't support opening blob: URLs in a new
-                    // tab: fall back to a direct download so the user still gets a real PDF.
-                    doc.save(buildObjectionFilename(lastAuditData.practice, lastAuditData.date));
-                    showToast("Popup blockiert – PDF wurde stattdessen heruntergeladen.");
+                // Try native Android/iOS path
+                const platform = typeof Capacitor !== 'undefined' ? Capacitor.getPlatform() : 'web';
+                if (platform === 'android') {
+                    // Android: Use FileOpener for proper ACTION_VIEW with FileProvider
+                    try {
+                        const { Filesystem } = Capacitor.Plugins;
+                        const { FileOpener } = Capacitor.Plugins;
+                        if (!Filesystem || !FileOpener) throw new Error('Required Capacitor plugins not available');
+
+                        // Write PDF to cache directory
+                        const pdfData = doc.output('dataurlstring');
+                        const base64Data = pdfData.split('base64,')[1];
+
+                        const writeResult = await Filesystem.writeFile({
+                            path: filename,
+                            data: base64Data,
+                            directory: 'CACHE'
+                        });
+
+                        const fileUri = writeResult.uri;
+                        if (!fileUri) throw new Error('No file URI from Filesystem.writeFile');
+
+                        console.log("Opening PDF with FileOpener:", fileUri);
+
+                        // Use FileOpener to open PDF with proper FileProvider handling
+                        await FileOpener.open({
+                            filePath: fileUri,
+                            contentType: 'application/pdf',
+                            openWithDefault: true
+                        });
+
+                        // Only show toast after FileOpener successfully opens the file
+                        showToast("Einwand-PDF wird angezeigt");
+                        return;
+                    } catch (androidErr) {
+                        console.error("Android PDF preview failed:", androidErr.message || androidErr);
+                        showToast("Fehler beim PDF-Anzeigen: " + (androidErr.message || "Unbekannter Fehler"), true);
+                        return;
+                    }
+                } else if (platform === 'ios') {
+                    // iOS: Keep window.open() behavior (out of scope for this fix)
+                    try {
+                        const { Filesystem } = Capacitor.Plugins;
+                        if (!Filesystem) throw new Error('Filesystem plugin not available');
+
+                        const pdfData = doc.output('dataurlstring');
+                        const base64Data = pdfData.split('base64,')[1];
+
+                        const writeResult = await Filesystem.writeFile({
+                            path: filename,
+                            data: base64Data,
+                            directory: 'CACHE'
+                        });
+
+                        const fileUri = writeResult.uri;
+                        if (!fileUri) throw new Error('No file URI from Filesystem.writeFile');
+
+                        console.log("Opening PDF file URI (iOS):", fileUri);
+                        window.open(fileUri, '_blank');
+                        showToast("Einwand-PDF wird angezeigt");
+                        return;
+                    } catch (iosErr) {
+                        console.error("iOS PDF preview failed:", iosErr.message || iosErr);
+                    }
                 }
+
+                // Web fallback: use blob URL for browsers
+                console.log("Using web fallback for PDF preview");
+                const blobUrl = doc.output('bloburl');
+                if (window.innerWidth < 768) {
+                    // Mobile: open in current window to avoid popup blocks
+                    window.location.href = blobUrl;
+                } else {
+                    // Desktop: open in new tab
+                    window.open(blobUrl, '_blank');
+                }
+                showToast("Einwand-PDF wird angezeigt");
             } catch (err) {
-                console.error("printObjectionPDF error:", err);
-                showToast("Fehler beim PDF-Druck: " + (err.message || err), true);
+                console.error("previewObjectionPDF error:", err);
+                showToast("Fehler beim PDF-Anzeigen: " + (err.message || err), true);
             }
         }
 
