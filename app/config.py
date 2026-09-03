@@ -87,11 +87,15 @@ class Settings(BaseSettings):
     @property
     def effective_sync_database_url(self) -> str:
         """Liefert eine synchrone DB-URL fuer Tools wie Alembic."""
-        if self.SYNC_DATABASE_URL:
-            return self.SYNC_DATABASE_URL
+        url = self.SYNC_DATABASE_URL or self.DATABASE_URL
+
+        # Legacy-Render/Postgres-URLs fuer SQLAlchemy 2.x normalisieren.
+        if url.startswith("postgres://"):
+            return url.replace("postgres://", "postgresql+psycopg2://", 1)
+
         # Async-Treiber-Hinweise entfernen, um eine synchrone URL zu erhalten.
         return (
-            self.DATABASE_URL.replace("+aiosqlite", "")
+            url.replace("+aiosqlite", "")
             .replace("+asyncpg", "+psycopg2")
         )
 
