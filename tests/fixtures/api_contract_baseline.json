@@ -1,0 +1,1652 @@
+{
+  "captured_at_commit": "9311abe6e0a5bb10d3ebcd89a84fb8f06535178b",
+  "openapi": {
+    "components": {
+      "schemas": {
+        "Anomaly": {
+          "description": "Eine einzelne erkannte Auffaelligkeit im Validierungsbericht.",
+          "properties": {
+            "message": {
+              "description": "Patientenfreundliche Erklaerung.",
+              "title": "Message",
+              "type": "string"
+            },
+            "related_ziffern": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Related Ziffern",
+              "type": "array"
+            },
+            "severity": {
+              "default": "warning",
+              "description": "'warning' oder 'critical'.",
+              "title": "Severity",
+              "type": "string"
+            },
+            "type": {
+              "$ref": "#/components/schemas/AnomalyType"
+            }
+          },
+          "required": [
+            "type",
+            "message"
+          ],
+          "title": "Anomaly",
+          "type": "object"
+        },
+        "AnomalyType": {
+          "description": "Kategorien moeglicher Auffaelligkeiten.",
+          "enum": [
+            "time_anomaly",
+            "exclusion_anomaly",
+            "unknown_ziffer",
+            "multiplier_anomaly"
+          ],
+          "title": "AnomalyType",
+          "type": "string"
+        },
+        "AuditIssue": {
+          "description": "Einzelnes Prüfungsergebnis.",
+          "properties": {
+            "code": {
+              "description": "Betroffene GOÄ-Ziffer oder Fehler-Code",
+              "title": "Code",
+              "type": "string"
+            },
+            "message": {
+              "description": "Fehlermeldung",
+              "title": "Message",
+              "type": "string"
+            },
+            "severity": {
+              "description": "Schweregrad: WARN oder ERROR",
+              "title": "Severity",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "severity",
+            "message"
+          ],
+          "title": "AuditIssue",
+          "type": "object"
+        },
+        "BilledZiffer": {
+          "description": "Eine vom Nutzer eingereichte, abgerechnete GOAE-Position.",
+          "properties": {
+            "justification": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Schriftliche medizinische Begruendung fuer einen erhoehten Steigerungsfaktor (ueber dem kategoriespezifischen Schwellenwert), wie sie auf der Rechnung vermerkt sein muss.",
+              "title": "Justification"
+            },
+            "multiplier": {
+              "default": 2.3,
+              "description": "Steigerungsfaktor, z.B. 1.0, 1.8, 2.3 oder 3.5.",
+              "exclusiveMinimum": 0.0,
+              "title": "Multiplier",
+              "type": "number"
+            },
+            "service_time": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optionale Uhrzeit der Leistung (HH:MM), relevant fuer Kombinationsverbote wie GOAE 1 + 3 am selben Tag.",
+              "title": "Service Time"
+            },
+            "ziffer": {
+              "description": "GOAE-Ziffer, z.B. '1'.",
+              "title": "Ziffer",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ziffer"
+          ],
+          "title": "BilledZiffer",
+          "type": "object"
+        },
+        "Body_parse_and_validate_claim_api_v1_claims_parse_and_validate_post": {
+          "properties": {
+            "file": {
+              "description": "Foto (JPEG/PNG) oder PDF der Rechnung.",
+              "format": "binary",
+              "title": "File",
+              "type": "string"
+            },
+            "geofence_arrival": {
+              "description": "Ankunftszeit (Geofence).",
+              "format": "date-time",
+              "title": "Geofence Arrival",
+              "type": "string"
+            },
+            "geofence_departure": {
+              "description": "Abfahrtszeit (Geofence).",
+              "format": "date-time",
+              "title": "Geofence Departure",
+              "type": "string"
+            },
+            "patient_id": {
+              "default": "mobile-scan",
+              "description": "Eindeutige Patienten-ID.",
+              "title": "Patient Id",
+              "type": "string"
+            },
+            "praxis_name": {
+              "default": "Unbekannte Praxis",
+              "description": "Name der Praxis.",
+              "title": "Praxis Name",
+              "type": "string"
+            },
+            "total_billed_amount": {
+              "default": 0.0,
+              "description": "Gesamtbetrag in Euro.",
+              "title": "Total Billed Amount",
+              "type": "number"
+            }
+          },
+          "required": [
+            "geofence_arrival",
+            "geofence_departure",
+            "file"
+          ],
+          "title": "Body_parse_and_validate_claim_api_v1_claims_parse_and_validate_post",
+          "type": "object"
+        },
+        "CatalogMetadata": {
+          "description": "Metadaten des GOÄ-Katalogs.",
+          "properties": {
+            "catalog": {
+              "description": "Vollständiger GOÄ-Katalog",
+              "items": {
+                "type": "object"
+              },
+              "title": "Catalog",
+              "type": "array"
+            },
+            "last_updated": {
+              "description": "Letztes Update (ISO 8601)",
+              "title": "Last Updated",
+              "type": "string"
+            },
+            "total_codes": {
+              "description": "Anzahl der Katalogeinträge",
+              "title": "Total Codes",
+              "type": "integer"
+            },
+            "version_id": {
+              "description": "Katalog-Version",
+              "title": "Version Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "version_id",
+            "last_updated",
+            "total_codes",
+            "catalog"
+          ],
+          "title": "CatalogMetadata",
+          "type": "object"
+        },
+        "ClaimAuditRequest": {
+          "description": "Request-Schema für Rechnungsprüfung (B2B/B2C).",
+          "properties": {
+            "claimed_items": {
+              "description": "Abgerechnete Leistungen",
+              "items": {
+                "$ref": "#/components/schemas/ClaimItem"
+              },
+              "minItems": 1,
+              "title": "Claimed Items",
+              "type": "array"
+            },
+            "has_written_justification": {
+              "default": false,
+              "description": "Schriftliche Begründung vorhanden",
+              "title": "Has Written Justification",
+              "type": "boolean"
+            },
+            "invoice_number": {
+              "description": "Rechnungsnummer",
+              "title": "Invoice Number",
+              "type": "string"
+            },
+            "practice_name": {
+              "description": "Name der Praxis",
+              "title": "Practice Name",
+              "type": "string"
+            },
+            "presence_duration_minutes": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Aufenthaltsdauer in Minuten",
+              "title": "Presence Duration Minutes"
+            },
+            "treatment_date": {
+              "description": "Behandlungsdatum (YYYY-MM-DD)",
+              "title": "Treatment Date",
+              "type": "string"
+            }
+          },
+          "required": [
+            "invoice_number",
+            "practice_name",
+            "treatment_date",
+            "claimed_items"
+          ],
+          "title": "ClaimAuditRequest",
+          "type": "object"
+        },
+        "ClaimAuditResponse": {
+          "description": "Response-Schema für Rechnungsprüfung.",
+          "properties": {
+            "audit_status": {
+              "description": "OK, WARNING oder REJECTED",
+              "title": "Audit Status",
+              "type": "string"
+            },
+            "issues": {
+              "description": "Gefundene Auffälligkeiten",
+              "items": {
+                "$ref": "#/components/schemas/AuditIssue"
+              },
+              "title": "Issues",
+              "type": "array"
+            },
+            "proof_hash": {
+              "description": "SHA-256 Nachweis-Hash",
+              "title": "Proof Hash",
+              "type": "string"
+            },
+            "savings_potential_eur": {
+              "description": "Einsparpotenzial in EUR",
+              "minimum": 0.0,
+              "title": "Savings Potential Eur",
+              "type": "number"
+            },
+            "total_claimed_eur": {
+              "description": "Gesamtbetrag der Rechnung",
+              "title": "Total Claimed Eur",
+              "type": "number"
+            },
+            "valid_amount_eur": {
+              "description": "Gültiger Betrag nach Prüfung",
+              "title": "Valid Amount Eur",
+              "type": "number"
+            }
+          },
+          "required": [
+            "audit_status",
+            "total_claimed_eur",
+            "valid_amount_eur",
+            "savings_potential_eur",
+            "proof_hash"
+          ],
+          "title": "ClaimAuditResponse",
+          "type": "object"
+        },
+        "ClaimItem": {
+          "description": "Einzelne abgerechnete GOÄ-Ziffer.",
+          "properties": {
+            "amount_eur": {
+              "description": "Berechneter Betrag in EUR",
+              "exclusiveMinimum": 0.0,
+              "title": "Amount Eur",
+              "type": "number"
+            },
+            "code": {
+              "description": "GOÄ-Ziffer (z.B. '1', '3', 'A')",
+              "title": "Code",
+              "type": "string"
+            },
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optionale Leistungsbeschreibung",
+              "title": "Description"
+            },
+            "factor": {
+              "description": "Steigerungsfaktor (z.B. 2.3)",
+              "exclusiveMinimum": 0.0,
+              "title": "Factor",
+              "type": "number"
+            }
+          },
+          "required": [
+            "code",
+            "factor",
+            "amount_eur"
+          ],
+          "title": "ClaimItem",
+          "type": "object"
+        },
+        "ClaimValidationReport": {
+          "description": "Umfassender Bericht ueber das Ergebnis der Plausibilitaetspruefung.",
+          "properties": {
+            "actual_duration_minutes": {
+              "description": "Tatsaechliche Aufenthaltsdauer laut Geofence.",
+              "title": "Actual Duration Minutes",
+              "type": "number"
+            },
+            "anomalies": {
+              "items": {
+                "$ref": "#/components/schemas/Anomaly"
+              },
+              "title": "Anomalies",
+              "type": "array"
+            },
+            "is_valid": {
+              "description": "True, wenn keine Anomalien gefunden wurden.",
+              "title": "Is Valid",
+              "type": "boolean"
+            },
+            "patient_id": {
+              "title": "Patient Id",
+              "type": "string"
+            },
+            "praxis_name": {
+              "title": "Praxis Name",
+              "type": "string"
+            },
+            "required_treatment_time_minutes": {
+              "description": "Summe der Regelzeiten aller abgerechneten Ziffern.",
+              "title": "Required Treatment Time Minutes",
+              "type": "number"
+            },
+            "status": {
+              "description": "Resultierender Verarbeitungsstatus.",
+              "title": "Status",
+              "type": "string"
+            },
+            "time_tolerance_minutes": {
+              "description": "Angewandter Toleranzpuffer in Minuten.",
+              "title": "Time Tolerance Minutes",
+              "type": "integer"
+            },
+            "ziffer_details": {
+              "items": {
+                "$ref": "#/components/schemas/ZifferReport"
+              },
+              "title": "Ziffer Details",
+              "type": "array"
+            }
+          },
+          "required": [
+            "is_valid",
+            "status",
+            "patient_id",
+            "praxis_name",
+            "actual_duration_minutes",
+            "required_treatment_time_minutes",
+            "time_tolerance_minutes"
+          ],
+          "title": "ClaimValidationReport",
+          "type": "object"
+        },
+        "ClaimValidationRequest": {
+          "description": "Payload zum Validieren einer Rechnung anhand der Geofence-Zeiten.",
+          "properties": {
+            "billed_ziffern": {
+              "description": "Liste der abgerechneten Ziffern.",
+              "items": {
+                "$ref": "#/components/schemas/BilledZiffer"
+              },
+              "minItems": 1,
+              "title": "Billed Ziffern",
+              "type": "array"
+            },
+            "geofence_arrival": {
+              "description": "Ankunftszeit (Geofence).",
+              "format": "date-time",
+              "title": "Geofence Arrival",
+              "type": "string"
+            },
+            "geofence_departure": {
+              "description": "Abfahrtszeit (Geofence).",
+              "format": "date-time",
+              "title": "Geofence Departure",
+              "type": "string"
+            },
+            "patient_id": {
+              "description": "Eindeutige Patienten-ID.",
+              "title": "Patient Id",
+              "type": "string"
+            },
+            "praxis_name": {
+              "description": "Name der Praxis / des Leistungserbringers.",
+              "title": "Praxis Name",
+              "type": "string"
+            },
+            "total_billed_amount": {
+              "default": 0.0,
+              "description": "Gesamtbetrag der Rechnung in Euro.",
+              "minimum": 0.0,
+              "title": "Total Billed Amount",
+              "type": "number"
+            }
+          },
+          "required": [
+            "patient_id",
+            "praxis_name",
+            "geofence_arrival",
+            "geofence_departure",
+            "billed_ziffern"
+          ],
+          "title": "ClaimValidationRequest",
+          "type": "object"
+        },
+        "GOAZifferRead": {
+          "description": "Schema zur Rueckgabe eines Katalogeintrags.",
+          "properties": {
+            "category": {
+              "default": "personal",
+              "description": "personal | technical | surcharge",
+              "title": "Category",
+              "type": "string"
+            },
+            "exclusion_ziffern": {
+              "description": "Ziffern, die nicht gemeinsam abgerechnet werden duerfen.",
+              "items": {
+                "type": "string"
+              },
+              "title": "Exclusion Ziffern",
+              "type": "array"
+            },
+            "fee_max": {
+              "default": 0.0,
+              "description": "Hoechstsatz-Betrag in Euro.",
+              "title": "Fee Max",
+              "type": "number"
+            },
+            "fee_simple": {
+              "default": 0.0,
+              "description": "Einfachsatz (1,0x) in Euro.",
+              "title": "Fee Simple",
+              "type": "number"
+            },
+            "fee_threshold": {
+              "default": 0.0,
+              "description": "Schwellenwert-Betrag (2,3x bzw. 1,8x) in Euro.",
+              "title": "Fee Threshold",
+              "type": "number"
+            },
+            "max_multiplier": {
+              "default": 3.5,
+              "description": "Zulaessiger Hoechstsatz (§ 5 GOAE) bzw. 1.0 bei Zuschlaegen.",
+              "title": "Max Multiplier",
+              "type": "number"
+            },
+            "max_per_session": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Maximale Anzahl je Sitzung, z.B. 3 fuer GOAE 420.",
+              "title": "Max Per Session"
+            },
+            "rule_time_minutes": {
+              "default": 0,
+              "description": "Mindest-Regelzeit der Leistung in Minuten.",
+              "minimum": 0.0,
+              "title": "Rule Time Minutes",
+              "type": "integer"
+            },
+            "sort_order": {
+              "default": 0,
+              "description": "Anzeige-Reihenfolge im Katalog.",
+              "title": "Sort Order",
+              "type": "integer"
+            },
+            "threshold_multiplier": {
+              "default": 2.3,
+              "description": "Schwellenwert, ab dem eine Begruendung noetig ist.",
+              "title": "Threshold Multiplier",
+              "type": "number"
+            },
+            "title_official": {
+              "description": "Offizieller, rechtlich verbindlicher Leistungstext.",
+              "title": "Title Official",
+              "type": "string"
+            },
+            "title_patient": {
+              "description": "Patientenfreundliche Uebersetzung in einfacher Sprache.",
+              "title": "Title Patient",
+              "type": "string"
+            },
+            "ziffer": {
+              "description": "GOAE-Ziffer, z.B. '1', '5', '250', 'D'.",
+              "title": "Ziffer",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ziffer",
+            "title_official",
+            "title_patient"
+          ],
+          "title": "GOAZifferRead",
+          "type": "object"
+        },
+        "GeofenceVerifyRequest": {
+          "description": "Request-Schema für Geofence-Verifizierung.",
+          "properties": {
+            "accuracy_meters": {
+              "description": "GPS-Genauigkeit in Metern",
+              "minimum": 0.0,
+              "title": "Accuracy Meters",
+              "type": "number"
+            },
+            "arrival_time": {
+              "description": "Ankunftszeit (ISO 8601)",
+              "title": "Arrival Time",
+              "type": "string"
+            },
+            "departure_time": {
+              "description": "Abfahrtszeit (ISO 8601)",
+              "title": "Departure Time",
+              "type": "string"
+            },
+            "latitude": {
+              "description": "Breitengrad",
+              "maximum": 90.0,
+              "minimum": -90.0,
+              "title": "Latitude",
+              "type": "number"
+            },
+            "longitude": {
+              "description": "Längengrad",
+              "maximum": 180.0,
+              "minimum": -180.0,
+              "title": "Longitude",
+              "type": "number"
+            },
+            "practice_name": {
+              "description": "Name der Praxis",
+              "title": "Practice Name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "latitude",
+            "longitude",
+            "accuracy_meters",
+            "arrival_time",
+            "departure_time",
+            "practice_name"
+          ],
+          "title": "GeofenceVerifyRequest",
+          "type": "object"
+        },
+        "GeofenceVerifyResponse": {
+          "description": "Response-Schema für Geofence-Verifizierung.",
+          "properties": {
+            "audit_hash": {
+              "description": "SHA-256 Audit-Hash",
+              "title": "Audit Hash",
+              "type": "string"
+            },
+            "duration_minutes": {
+              "description": "Aufenthaltsdauer in Minuten",
+              "title": "Duration Minutes",
+              "type": "integer"
+            },
+            "proof_valid": {
+              "description": "Beweis gültig",
+              "title": "Proof Valid",
+              "type": "boolean"
+            },
+            "verified_at": {
+              "description": "Zeitstempel der Verifizierung (ISO 8601)",
+              "title": "Verified At",
+              "type": "string"
+            }
+          },
+          "required": [
+            "proof_valid",
+            "duration_minutes",
+            "audit_hash",
+            "verified_at"
+          ],
+          "title": "GeofenceVerifyResponse",
+          "type": "object"
+        },
+        "HTTPValidationError": {
+          "properties": {
+            "detail": {
+              "items": {
+                "$ref": "#/components/schemas/ValidationError"
+              },
+              "title": "Detail",
+              "type": "array"
+            }
+          },
+          "title": "HTTPValidationError",
+          "type": "object"
+        },
+        "ParseAndValidateResponse": {
+          "description": "Antwort des OCR-Upload-Endpunkts: erkannte Ziffern + Validierungsbericht.",
+          "properties": {
+            "extracted_invoice_number": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Aus der Rechnung erkannte Rechnungsnummer, sofern vorhanden.",
+              "title": "Extracted Invoice Number"
+            },
+            "extracted_practice_email": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Aus dem Rechnungskopf erkannte Praxis-/Abrechnungs-E-Mail, sofern vorhanden. Dient als Empfänger für den Einwand.",
+              "title": "Extracted Practice Email"
+            },
+            "extracted_praxis_name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Aus der Rechnung erkannter Praxisname, sofern vorhanden. Dient dem clientseitigen Abgleich mit dem Geofencing-Tagebuch.",
+              "title": "Extracted Praxis Name"
+            },
+            "extracted_treatment_date": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Aus der Rechnung erkanntes Behandlungsdatum (ISO 8601), sofern vorhanden. Dient dem clientseitigen Abgleich mit dem Geofencing-Tagebuch (ProofMed Geofencing-Beweis).",
+              "title": "Extracted Treatment Date"
+            },
+            "parsed_ziffern": {
+              "description": "Aus dem Foto/PDF automatisch erkannte, abgerechnete Ziffern.",
+              "items": {
+                "$ref": "#/components/schemas/BilledZiffer"
+              },
+              "title": "Parsed Ziffern",
+              "type": "array"
+            },
+            "raw_text_excerpt": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Ausschnitt des per OCR/Textextraktion erkannten Rohtexts.",
+              "title": "Raw Text Excerpt"
+            },
+            "report": {
+              "$ref": "#/components/schemas/ClaimValidationReport"
+            }
+          },
+          "required": [
+            "report"
+          ],
+          "title": "ParseAndValidateResponse",
+          "type": "object"
+        },
+        "RestoreBackupRequest": {
+          "description": "Anfrage zum Wiederherstellen eines verschluesselten Backups.",
+          "properties": {
+            "user_id_hash": {
+              "description": "SHA-256 Hash aus PIN und Salt zur Abfrage des verschluesselten Backups.",
+              "title": "User Id Hash",
+              "type": "string"
+            }
+          },
+          "required": [
+            "user_id_hash"
+          ],
+          "title": "RestoreBackupRequest",
+          "type": "object"
+        },
+        "RestoreBackupResponse": {
+          "description": "Antwort mit verschluesseltem Backup-Payload.",
+          "properties": {
+            "ciphertext_base64": {
+              "title": "Ciphertext Base64",
+              "type": "string"
+            },
+            "iv_base64": {
+              "title": "Iv Base64",
+              "type": "string"
+            },
+            "salt_base64": {
+              "title": "Salt Base64",
+              "type": "string"
+            },
+            "success": {
+              "default": true,
+              "title": "Success",
+              "type": "boolean"
+            },
+            "timestamp": {
+              "title": "Timestamp",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ciphertext_base64",
+            "iv_base64",
+            "salt_base64",
+            "timestamp"
+          ],
+          "title": "RestoreBackupResponse",
+          "type": "object"
+        },
+        "SaveBackupRequest": {
+          "description": "Payload zum Speichern eines verschluesselten Backups.\n\nDas Backend erhaelt ausschliesslich unlesbaren Chiffretext. Weder die PIN\nnoch Klartext-Tagebucheintraege oder Schluessel werden uebertragen.",
+          "properties": {
+            "ciphertext_base64": {
+              "description": "Mit AES-GCM-256 verschluesselter JSON-String des Tagebuchs (Base64).",
+              "title": "Ciphertext Base64",
+              "type": "string"
+            },
+            "iv_base64": {
+              "description": "Zufaelliger 12-Byte Initialisierungsvektor fuer AES-GCM (Base64).",
+              "title": "Iv Base64",
+              "type": "string"
+            },
+            "salt_base64": {
+              "description": "Zufaelliger 16-Byte Salt fuer PBKDF2-Schluesselableitung (Base64).",
+              "title": "Salt Base64",
+              "type": "string"
+            },
+            "user_id_hash": {
+              "description": "SHA-256 Hash aus PIN und Salt zur eindeutigen Zuordnung ohne PIN-Klartext.",
+              "maxLength": 128,
+              "minLength": 16,
+              "title": "User Id Hash",
+              "type": "string"
+            }
+          },
+          "required": [
+            "user_id_hash",
+            "ciphertext_base64",
+            "iv_base64",
+            "salt_base64"
+          ],
+          "title": "SaveBackupRequest",
+          "type": "object"
+        },
+        "SaveBackupResponse": {
+          "description": "Antwort nach erfolgreichem Speichern.",
+          "properties": {
+            "message": {
+              "default": "Backup erfolgreich auf Hetzner gespeichert!",
+              "title": "Message",
+              "type": "string"
+            },
+            "success": {
+              "default": true,
+              "title": "Success",
+              "type": "boolean"
+            },
+            "timestamp": {
+              "title": "Timestamp",
+              "type": "string"
+            }
+          },
+          "required": [
+            "timestamp"
+          ],
+          "title": "SaveBackupResponse",
+          "type": "object"
+        },
+        "SendObjectionRequest": {
+          "description": "Payload fuer POST /api/v1/send-objection.",
+          "properties": {
+            "body_html": {
+              "minLength": 1,
+              "title": "Body Html",
+              "type": "string"
+            },
+            "invoice_filename": {
+              "default": "",
+              "title": "Invoice Filename",
+              "type": "string"
+            },
+            "invoice_image_base64": {
+              "default": "",
+              "title": "Invoice Image Base64",
+              "type": "string"
+            },
+            "invoice_number": {
+              "default": "",
+              "title": "Invoice Number",
+              "type": "string"
+            },
+            "practice_name": {
+              "default": "",
+              "title": "Practice Name",
+              "type": "string"
+            },
+            "recipient_email": {
+              "maxLength": 320,
+              "minLength": 3,
+              "title": "Recipient Email",
+              "type": "string"
+            },
+            "subject": {
+              "maxLength": 300,
+              "minLength": 1,
+              "title": "Subject",
+              "type": "string"
+            }
+          },
+          "required": [
+            "recipient_email",
+            "subject",
+            "body_html"
+          ],
+          "title": "SendObjectionRequest",
+          "type": "object"
+        },
+        "SendObjectionResponse": {
+          "properties": {
+            "message": {
+              "title": "Message",
+              "type": "string"
+            },
+            "success": {
+              "title": "Success",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "success",
+            "message"
+          ],
+          "title": "SendObjectionResponse",
+          "type": "object"
+        },
+        "ValidationError": {
+          "properties": {
+            "loc": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ]
+              },
+              "title": "Location",
+              "type": "array"
+            },
+            "msg": {
+              "title": "Message",
+              "type": "string"
+            },
+            "type": {
+              "title": "Error Type",
+              "type": "string"
+            }
+          },
+          "required": [
+            "loc",
+            "msg",
+            "type"
+          ],
+          "title": "ValidationError",
+          "type": "object"
+        },
+        "ZifferReport": {
+          "description": "Detailangaben zu einer geprueften Ziffer im Bericht.",
+          "properties": {
+            "justification": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Justification"
+            },
+            "known": {
+              "default": true,
+              "description": "Ob die Ziffer im GOAE-Katalog gefunden wurde.",
+              "title": "Known",
+              "type": "boolean"
+            },
+            "multiplier": {
+              "title": "Multiplier",
+              "type": "number"
+            },
+            "rule_time_minutes": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rule Time Minutes"
+            },
+            "title_official": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Title Official"
+            },
+            "title_patient": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Title Patient"
+            },
+            "ziffer": {
+              "title": "Ziffer",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ziffer",
+            "multiplier"
+          ],
+          "title": "ZifferReport",
+          "type": "object"
+        }
+      }
+    },
+    "info": {
+      "description": "ProofMed - automatische GOAE-Rechnungspruefung & Geofencing-Nachweis: Backend zur Pruefung privataerztlicher GOAE-Rechnungen mittels deterministischer Regeln sowie Geofencing-/Zeit-Plausibilitaet.",
+      "title": "ProofMed",
+      "version": "0.1.0"
+    },
+    "openapi": "3.1.0",
+    "paths": {
+      "/api/v1/backup/restore": {
+        "post": {
+          "description": "Ruft das verschluesselte E2EE-Tagebuch-Backup anhand des user_id_hash ab.\n\nGibt HTTP 404 zurueck, falls kein Backup fuer den Hash existiert.",
+          "operationId": "restore_backup_api_v1_backup_restore_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoreBackupRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/RestoreBackupResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Zero-Knowledge E2EE Backup von Hetzner abrufen",
+          "tags": [
+            "backup"
+          ]
+        }
+      },
+      "/api/v1/backup/save": {
+        "post": {
+          "description": "Speichert oder ueberschreibt das verschluesselte E2EE-Tagebuch-Backup.\n\nDas Backend empfaengt und speichert ausschliesslich unlesbaren Chiffretext.\nWeder die PIN noch Klartext-Tagebucheintraege oder kryptographische Schluessel\nwerden an das Backend uebertragen oder dort gespeichert.",
+          "operationId": "save_backup_api_v1_backup_save_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaveBackupRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SaveBackupResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Zero-Knowledge E2EE Backup auf Hetzner speichern",
+          "tags": [
+            "backup"
+          ]
+        }
+      },
+      "/api/v1/claims/audit": {
+        "post": {
+          "description": "Prüft eine Rechnung auf Multiplikator-Verstöße, Ausschlusskonflikte und Zeit-Plausibilität. Berechnet Einsparpotenzial und generiert kryptografischen Nachweis-Hash.",
+          "operationId": "audit_claim_api_v1_claims_audit_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimAuditRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ClaimAuditResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Rechnung nach GOÄ-Regeln prüfen (B2B/B2C)",
+          "tags": [
+            "audit"
+          ]
+        }
+      },
+      "/api/v1/claims/bipro-export": {
+        "post": {
+          "description": "Transformiert Rechnungsdaten in BiPRO-konforme Struktur (Stub).",
+          "operationId": "export_bipro_api_v1_claims_bipro_export_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimAuditRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "title": "Response Export Bipro Api V1 Claims Bipro Export Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Rechnung als BiPRO Norm 430/440 exportieren",
+          "tags": [
+            "audit"
+          ]
+        }
+      },
+      "/api/v1/claims/catalog": {
+        "get": {
+          "description": "Gibt alle im System hinterlegten GOAE-Ziffern zurueck.",
+          "operationId": "list_catalog_api_v1_claims_catalog_get",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "items": {
+                      "$ref": "#/components/schemas/GOAZifferRead"
+                    },
+                    "title": "Response List Catalog Api V1 Claims Catalog Get",
+                    "type": "array"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          },
+          "summary": "Hinterlegten GOAE-Katalog abrufen",
+          "tags": [
+            "claims"
+          ]
+        }
+      },
+      "/api/v1/claims/fhir-export": {
+        "post": {
+          "description": "Transformiert Rechnungsdaten in eine HL7 FHIR R4 ExplanationOfBenefit-Ressource (Stub).",
+          "operationId": "export_fhir_api_v1_claims_fhir_export_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimAuditRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "title": "Response Export Fhir Api V1 Claims Fhir Export Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Rechnung als HL7 FHIR ExplanationOfBenefit exportieren",
+          "tags": [
+            "audit"
+          ]
+        }
+      },
+      "/api/v1/claims/parse-and-validate": {
+        "post": {
+          "description": "Liest eine fotografierte/gescannte Rechnung aus und validiert sie direkt.\n\nExtrahiert per Regex-Heuristik GOAE-Ziffern, Steigerungsfaktoren und\nBegruendungstexte aus dem hochgeladenen Bild oder PDF und fuehrt\nanschliessend dieselbe Plausibilitaetspruefung wie `/claims/validate` durch.",
+          "operationId": "parse_and_validate_claim_api_v1_claims_parse_and_validate_post",
+          "requestBody": {
+            "content": {
+              "multipart/form-data": {
+                "schema": {
+                  "$ref": "#/components/schemas/Body_parse_and_validate_claim_api_v1_claims_parse_and_validate_post"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ParseAndValidateResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Rechnungsfoto/-PDF automatisch auslesen und sofort validieren",
+          "tags": [
+            "claims"
+          ]
+        }
+      },
+      "/api/v1/claims/validate": {
+        "post": {
+          "description": "Fuehrt die regelbasierte Plausibilitaetspruefung einer Rechnung durch.\n\nEs werden eine Zeit-Plausibilitaetspruefung (Geofence-Dauer vs. Regelzeiten)\nsowie eine Ausschlusspruefung (gegenseitig nicht abrechenbare Ziffern)\ndurchgefuehrt. Zurueckgegeben wird ein umfassender Bericht inklusive\npatientenfreundlicher Uebersetzungen.",
+          "operationId": "validate_claim_api_v1_claims_validate_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimValidationRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ClaimValidationReport"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Rechnung anhand von GOAE-Regeln und Geofence-Zeiten validieren",
+          "tags": [
+            "claims"
+          ]
+        }
+      },
+      "/api/v1/geofence/verify-proof": {
+        "post": {
+          "description": "Generiert deterministischen SHA-256 Audit-Hash aus GPS-Koordinaten, Zeitfenster und Praxisname für fälschungssichere Anwesenheitsnachweise.",
+          "operationId": "verify_geofence_api_v1_geofence_verify_proof_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeofenceVerifyRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/GeofenceVerifyResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Geofence-Nachweis kryptografisch verifizieren",
+          "tags": [
+            "audit"
+          ]
+        }
+      },
+      "/api/v1/goa-catalog": {
+        "get": {
+          "description": "Liefert den vollständigen GOÄ 2026 Katalog mit Kategorien, Multiplikatoren und Ausschlussregeln.",
+          "operationId": "get_goa_catalog_api_v1_goa_catalog_get",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/CatalogMetadata"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          },
+          "summary": "GOÄ-Katalog mit Metadaten abrufen",
+          "tags": [
+            "audit"
+          ]
+        }
+      },
+      "/api/v1/send-objection": {
+        "post": {
+          "description": "Sendet den Einwand per SMTP oder gibt einen erfolgreichen Mock zurueck.",
+          "operationId": "send_objection_api_v1_send_objection_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendObjectionRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SendObjectionResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Formellen Einwand per E-Mail versenden",
+          "tags": [
+            "objections"
+          ]
+        }
+      },
+      "/health": {
+        "get": {
+          "description": "Einfacher Health-Check fuer Monitoring und Deployments.",
+          "operationId": "health_health_get",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "title": "Response Health Health Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          },
+          "summary": "Health-Check",
+          "tags": [
+            "system"
+          ]
+        }
+      }
+    }
+  },
+  "routes": [
+    {
+      "kind": "route",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "name": "openapi",
+      "path": "/openapi.json"
+    },
+    {
+      "kind": "route",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "name": "swagger_ui_html",
+      "path": "/api/docs"
+    },
+    {
+      "kind": "route",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "name": "swagger_ui_redirect",
+      "path": "/docs/oauth2-redirect"
+    },
+    {
+      "kind": "route",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "name": "redoc_html",
+      "path": "/api/redoc"
+    },
+    {
+      "kind": "route",
+      "methods": [
+        "POST"
+      ],
+      "name": "validate_claim",
+      "path": "/api/v1/claims/validate"
+    },
+    {
+      "kind": "route",
+      "methods": [
+        "POST"
+      ],
+      "name": "parse_and_validate_claim",
+      "path": "/api/v1/claims/parse-and-validate"
+    },
+    {
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "list_catalog",
+      "path": "/api/v1/claims/catalog"
+    },
+    {
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "get_goa_catalog",
+      "path": "/api/v1/goa-catalog"
+    },
+    {
+      "kind": "route",
+      "methods": [
+        "POST"
+      ],
+      "name": "audit_claim",
+      "path": "/api/v1/claims/audit"
+    },
+    {
+      "kind": "route",
+      "methods": [
+        "POST"
+      ],
+      "name": "verify_geofence",
+      "path": "/api/v1/geofence/verify-proof"
+    },
+    {
+      "kind": "route",
+      "methods": [
+        "POST"
+      ],
+      "name": "export_fhir",
+      "path": "/api/v1/claims/fhir-export"
+    },
+    {
+      "kind": "route",
+      "methods": [
+        "POST"
+      ],
+      "name": "export_bipro",
+      "path": "/api/v1/claims/bipro-export"
+    },
+    {
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "health",
+      "path": "/health"
+    },
+    {
+      "kind": "route",
+      "methods": [
+        "POST"
+      ],
+      "name": "save_backup",
+      "path": "/api/v1/backup/save"
+    },
+    {
+      "kind": "route",
+      "methods": [
+        "POST"
+      ],
+      "name": "restore_backup",
+      "path": "/api/v1/backup/restore"
+    },
+    {
+      "kind": "route",
+      "methods": [
+        "POST"
+      ],
+      "name": "send_objection",
+      "path": "/api/v1/send-objection"
+    },
+    {
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "redirect_to_dashboard",
+      "path": "/redoc"
+    },
+    {
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "redirect_to_dashboard",
+      "path": "/docs"
+    },
+    {
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "serve_manifest",
+      "path": "/manifest.json"
+    },
+    {
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "serve_service_worker",
+      "path": "/service-worker.js"
+    },
+    {
+      "kind": "mount",
+      "methods": [],
+      "name": "static",
+      "path": ""
+    }
+  ]
+}

@@ -22,13 +22,21 @@ from sqlalchemy.orm import Session
 from app.database import Base
 from app.models import reference_core as rc
 from tests import conftest
-from tests.conftest import REPO_ROOT, _make_engine, assert_pg_reset_allowed, reset_database
+from tests.conftest import (
+    LEGACY_TABLES,
+    REPO_ROOT,
+    UTC_NOW,
+    _make_engine,
+    assert_pg_reset_allowed,
+    legacy_snapshot,
+    reflect_structure,
+    reset_database,
+    seed_legacy_state,
+)
 
 REVISION = "0001_reference_core"
+LEGACY_REVISION = "0000_legacy_baseline"
 REFERENCE_TABLES = set(rc.REFERENCE_CORE_TABLES)
-LEGACY_TABLES = {"goa_ziffern", "medical_claims", "claim_line_items", "encrypted_backups"}
-
-UTC_NOW = datetime(2026, 9, 3, 12, 0, tzinfo=timezone.utc)
 
 
 # ---------------------------------------------------------------------------
@@ -45,66 +53,13 @@ def _alembic_version_rows(engine: sa.Engine) -> list[str]:
         return list(conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalars())
 
 
-def _legacy_metadata_tables() -> list[sa.Table]:
-    from app import models as legacy_models  # noqa: F401 - registriert Legacy-Tabellen
-
-    return [Base.metadata.tables[name] for name in sorted(LEGACY_TABLES)]
-
-
 def _reference_metadata_tables() -> list[sa.Table]:
     return [Base.metadata.tables[name] for name in rc.REFERENCE_CORE_TABLES]
 
 
-def _normalize_sql(text_: str | None) -> str:
-    return " ".join((text_ or "").replace("\n", " ").split()).strip("()")
-
-
-def _reflect_structure(engine: sa.Engine, table_names: set[str]) -> dict:
-    """Dialekt-neutrale, vergleichbare Strukturbeschreibung der Tabellen."""
-    insp = sa.inspect(engine)
-    structure: dict = {}
-    for name in sorted(table_names):
-        columns = []
-        for col in insp.get_columns(name):
-            default = col.get("default")
-            columns.append(
-                (
-                    col["name"],
-                    repr(col["type"]),
-                    bool(col["nullable"]),
-                    _normalize_sql(default) if default is not None else None,
-                )
-            )
-        pk = tuple(insp.get_pk_constraint(name)["constrained_columns"])
-        fks = sorted(
-            (
-                fk["name"],
-                tuple(fk["constrained_columns"]),
-                fk["referred_table"],
-                tuple(fk["referred_columns"]),
-                (fk.get("options") or {}).get("ondelete"),
-            )
-            for fk in insp.get_foreign_keys(name)
-        )
-        uniques = sorted(
-            (uq["name"], tuple(uq["column_names"])) for uq in insp.get_unique_constraints(name)
-        )
-        checks = sorted(
-            (ck["name"], _normalize_sql(ck["sqltext"])) for ck in insp.get_check_constraints(name)
-        )
-        indexes = sorted(
-            (ix["name"], tuple(ix["column_names"]), bool(ix.get("unique")))
-            for ix in insp.get_indexes(name)
-        )
-        structure[name] = {
-            "columns": columns,
-            "pk": pk,
-            "fks": fks,
-            "uniques": uniques,
-            "checks": checks,
-            "indexes": indexes,
-        }
-    return structure
+_reflect_structure = reflect_structure
+_legacy_snapshot = legacy_snapshot
+_seed_legacy_state = seed_legacy_state
 
 
 def _new_edition(**overrides) -> rc.FeeScheduleEdition:
@@ -199,8 +154,9 @@ def test_t1_upgrade_clean_database(migrated_engine: sa.Engine) -> None:
     tables = _tables(migrated_engine)
     assert REFERENCE_TABLES <= tables
     assert "alembic_version" in tables
-    assert tables - REFERENCE_TABLES - {"alembic_version"} == set()
-    assert not (tables & LEGACY_TABLES), "Alembic darf keine Legacy-Tabellen anlegen"
+    # Seit WP-INFRA-1 gehoeren auch die vier Legacy-Tabellen zu Alembic (0000_legacy_baseline).
+    assert LEGACY_TABLES <= tables
+    assert tables - REFERENCE_TABLES - set(LEGACY_TABLES) - {"alembic_version"} == set()
     assert _alembic_version_rows(migrated_engine) == [REVISION]
     # Schema bleibt leer (keine Seed-Zeilen).
     with migrated_engine.connect() as conn:
@@ -214,50 +170,12 @@ def test_t1_upgrade_clean_database(migrated_engine: sa.Engine) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _seed_legacy_state(engine: sa.Engine) -> dict[str, list]:
-    from app.models.backup import EncryptedBackup
-    from app.models.goa import GOAZiffer
-
-    Base.metadata.create_all(engine, tables=_legacy_metadata_tables())
-    with Session(engine) as session:
-        session.add(
-            GOAZiffer(
-                ziffer="TEST_X",
-                title_official="TITLE_OFFICIAL_X",
-                title_patient="TITLE_PATIENT_X",
-                rule_time_minutes=1,
-                exclusion_ziffern=[],
-            )
-        )
-        session.add(
-            EncryptedBackup(
-                user_id_hash="hash_x",
-                ciphertext_base64="Y2lwaGVy",
-                iv_base64="aXY=",
-                salt_base64="c2FsdA==",
-                updated_at=UTC_NOW,
-            )
-        )
-        session.commit()
-    return _legacy_snapshot(engine)
-
-
-def _legacy_snapshot(engine: sa.Engine) -> dict[str, list]:
-    insp = sa.inspect(engine)
-    snapshot: dict[str, list] = {}
-    with engine.connect() as conn:
-        for name in sorted(LEGACY_TABLES):
-            columns = [c["name"] for c in insp.get_columns(name)]
-            rows = conn.execute(
-                sa.text(f"SELECT * FROM {name} ORDER BY 1")
-            ).all()
-            snapshot[name] = [columns, [tuple(r) for r in rows]]
-    return snapshot
-
-
-def test_t2_upgrade_with_legacy_state(engine: sa.Engine, alembic_cfg) -> None:
-    before = _seed_legacy_state(engine)
+def test_t2_upgrade_with_legacy_state(stamped_legacy_engine, alembic_cfg) -> None:
+    # Pre-Alembic-Legacy-DB (create_all + Zeilen) -> stamp-legacy (fail-closed
+    # Preflight) -> upgrade head: nur die 17 Reference-Core-Tabellen kommen hinzu.
+    engine, before = stamped_legacy_engine
     assert before["goa_ziffern"][1], "Legacy-Seed fehlgeschlagen"
+    assert _alembic_version_rows(engine) == [LEGACY_REVISION]
 
     command.upgrade(alembic_cfg, "head")
 
@@ -269,23 +187,24 @@ def test_t2_upgrade_with_legacy_state(engine: sa.Engine, alembic_cfg) -> None:
 
 
 # ---------------------------------------------------------------------------
-# T3 - Downgrade (inkl. Idempotenz)
+# T3 - Downgrade auf die Legacy-Baseline (inkl. Idempotenz)
 # ---------------------------------------------------------------------------
 
 
-def test_t3_downgrade_restores_legacy_only(engine: sa.Engine, alembic_cfg) -> None:
-    before = _seed_legacy_state(engine)
+def test_t3_downgrade_restores_legacy_only(stamped_legacy_engine, alembic_cfg) -> None:
+    engine, before = stamped_legacy_engine
     command.upgrade(alembic_cfg, "head")
 
-    command.downgrade(alembic_cfg, "base")
+    # Reference Core entfernen = Downgrade auf 0000_legacy_baseline (nicht base).
+    command.downgrade(alembic_cfg, LEGACY_REVISION)
     tables = _tables(engine)
     assert not (tables & REFERENCE_TABLES), "Reference-Core-Tabellen wurden nicht entfernt"
     assert LEGACY_TABLES <= tables
     assert _legacy_snapshot(engine) == before
-    assert _alembic_version_rows(engine) == []
+    assert _alembic_version_rows(engine) == [LEGACY_REVISION]
 
-    # Zweiter Downgrade ist ein No-op.
-    command.downgrade(alembic_cfg, "base")
+    # Zweiter Downgrade auf dasselbe Ziel ist ein No-op.
+    command.downgrade(alembic_cfg, LEGACY_REVISION)
     assert _tables(engine) == tables
     assert _legacy_snapshot(engine) == before
 

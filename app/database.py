@@ -2,6 +2,11 @@
 
 Stellt die async Engine, eine Session-Factory sowie die deklarative Basis
 bereit. Eine FastAPI-Dependency `get_db` liefert sauber gescopte Sessions.
+
+Seit WP-INFRA-1 ist Alembic die einzige Schema-Autoritaet: `init_db()` erzeugt
+KEIN Schema mehr (kein `create_all`, keine ad-hoc `ALTER TABLE`), sondern
+verifiziert nur noch fail-closed, dass die Datenbank auf dem erwarteten
+Alembic-Head steht (siehe `app/schema_guard.py`).
 """
 
 from __future__ import annotations
@@ -9,7 +14,6 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncGenerator
 
-from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -62,40 +66,17 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
-_GOA_EXTRA_COLUMNS: tuple[tuple[str, str], ...] = (
-    ("category", "VARCHAR(32) NOT NULL DEFAULT 'personal'"),
-    ("threshold_multiplier", "FLOAT NOT NULL DEFAULT 2.3"),
-    ("max_multiplier", "FLOAT NOT NULL DEFAULT 3.5"),
-    ("fee_simple", "FLOAT NOT NULL DEFAULT 0"),
-    ("fee_threshold", "FLOAT NOT NULL DEFAULT 0"),
-    ("fee_max", "FLOAT NOT NULL DEFAULT 0"),
-    ("max_per_session", "INTEGER"),
-    ("sort_order", "INTEGER NOT NULL DEFAULT 0"),
-)
-
-
-def _ensure_goa_catalog_columns(sync_conn) -> None:
-    """Ergaenzt fehlende GOAE-Spalten in bestehenden SQLite-DBs ohne Alembic."""
-    inspector = inspect(sync_conn)
-    if "goa_ziffern" not in inspector.get_table_names():
-        return
-    existing = {col["name"] for col in inspector.get_columns("goa_ziffern")}
-    added = 0
-    for name, ddl in _GOA_EXTRA_COLUMNS:
-        if name in existing:
-            continue
-        sync_conn.execute(text(f"ALTER TABLE goa_ziffern ADD COLUMN {name} {ddl}"))
-        added += 1
-    if added:
-        logger.info("GOAE-Katalogschema erweitert: %d neue Spalte(n).", added)
-
-
 async def init_db() -> None:
-    """Erstellt alle Tabellen (fuer lokale Entwicklung ohne Migrationen)."""
-    # Import sorgt dafuer, dass alle Modelle bei der Metadata registriert sind.
-    from app import models  # noqa: F401
+    """Verifiziert das Datenbankschema fail-closed (erzeugt KEIN Schema).
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        await conn.run_sync(_ensure_goa_catalog_columns)
-    logger.info("Datenbankschema initialisiert (create_all).")
+    Loest eine `app.schema_guard.SchemaGuardError` aus, wenn die Datenbank nicht
+    exakt auf dem erwarteten Alembic-Head steht oder verwaltete Tabellen fehlen.
+    Migrationen werden ausserhalb der Anwendung ausgefuehrt (`alembic upgrade head`,
+    bestehende pre-Alembic-Datenbanken zuvor per `python -m app.schema_guard
+    stamp-legacy`).
+    """
+    # Lokaler Import vermeidet einen Importzyklus (schema_guard nutzt Base lazy).
+    from app.schema_guard import verify_schema_async
+
+    revision = await verify_schema_async(engine)
+    logger.info("Datenbankschema verifiziert (Alembic-Revision %s).", revision)

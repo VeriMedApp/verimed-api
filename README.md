@@ -106,28 +106,57 @@ Gibt den hinterlegten GOÄ-Katalog zurück.
 
 ## Migrationen (Alembic)
 
-Das Legacy-Schema (`goa_ziffern`, `medical_claims`, `claim_line_items`,
-`encrypted_backups`) wird weiterhin beim Anwendungsstart per
-`Base.metadata.create_all()` angelegt und ist **nicht** durch Alembic
-versioniert (kein Baseline-Revision). Alembic verwaltet ausschliesslich das
-Reference-Core-Schema (WP-01, Revision `0001_reference_core`), das beim
-normalen Anwendungsstart **nicht** automatisch erzeugt wird.
+**Alembic ist die einzige Schema-Autoritaet** (seit WP-INFRA-1). Die Anwendung
+erzeugt beim Start **kein** Schema mehr (kein `create_all()`, keine ad-hoc
+`ALTER TABLE`). Stattdessen prueft `init_db()` beim Start fail-closed, dass die
+Datenbank exakt auf dem erwarteten Alembic-Head steht und alle 21 verwalteten
+Tabellen existieren; andernfalls startet die Anwendung **nicht**
+(`app/schema_guard.py`, Fehlerklassen `SchemaGuardError`). Der Seed des
+GOAE-Katalogs laeuft unveraendert nach erfolgreicher Pruefung.
+
+Revisionsgraph:
+
+```
+None -> 0000_legacy_baseline -> 0001_reference_core
+```
+
+* `0000_legacy_baseline`: die vier Legacy-Tabellen (`goa_ziffern`,
+  `encrypted_backups`, `medical_claims`, `claim_line_items`) inkl. PostgreSQL-Enum
+  `claim_status` und der acht frueher per ALTER ergaenzten `goa_ziffern`-Spalten.
+* `0001_reference_core`: die 17 Reference-Core-Tabellen (WP-01).
 
 ```bash
-# Reference-Core-Tabellen anlegen (nur neue Tabellen; Legacy bleibt unberuehrt):
+# Neue (leere) Datenbank vollstaendig anlegen:
 alembic upgrade head
 
+# Bestehende Datenbank, die noch per create_all() entstanden ist (kein alembic_version):
+python -m app.schema_guard stamp-legacy   # fail-closed Struktur-Preflight, dann Stamp
+alembic upgrade head
+
+# Nur pruefen (rein lesend, identisch zur Startpruefung):
+python -m app.schema_guard check
+
 # Reference-Core-Tabellen wieder entfernen (verweigert bei finalisierten Manifesten):
-alembic downgrade base
+alembic downgrade 0000_legacy_baseline
 
 # SQL vorab pruefen, ohne eine Datenbank anzufassen:
 alembic upgrade head --sql
 ```
 
-> **Nicht** `alembic revision --autogenerate` gegen eine leere Datenbank
-> verwenden: Autogenerate wuerde dort auch die Legacy-Tabellen (inkl. des
-> Typs `EncryptedString`) ausgeben. Reference-Core-Revisionen werden von Hand
-> geschrieben und ueber die Tests gegen die Modelle abgeglichen.
+`stamp-legacy` schreibt `alembic_version` nur, wenn Tabellen, Spalten, Typen,
+Nullability, Primaerschluessel, Fremdschluessel (inkl. ON DELETE), Indizes und
+auf PostgreSQL die Enum-Labels von `claim_status` exakt der Baseline entsprechen,
+keine Reference-Core-Tabelle existiert und `alembic_version` leer/abwesend ist.
+Historische Server-Defaults auf den acht `goa_ziffern`-Zusatzspalten werden
+toleriert. `alembic downgrade base` verweigert, solange Legacy-Tabellen Daten
+enthalten (`PROOFMED_ALLOW_LEGACY_DROP=YES` nur fuer Wegwerf-Datenbanken).
+
+> Migrationen werden **ausserhalb** der Anwendung ausgefuehrt (lokal von Hand,
+> im Deployment vor dem Start der neuen Instanz). Die Anwendung migriert nie
+> selbst.
+
+> **Nicht** `alembic revision --autogenerate` verwenden: Revisionen werden von
+> Hand geschrieben und ueber die Tests gegen die Modelle abgeglichen.
 
 > Hinweis: Alembic nutzt automatisch eine synchrone DB-URL, die aus
 > `DATABASE_URL` abgeleitet wird (siehe `app/config.py`). Auch reine
