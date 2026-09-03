@@ -16,6 +16,9 @@ from alembic import context
 from app.config import settings
 from app.database import Base
 from app import models  # noqa: F401  (registriert alle Modelle bei der Metadata)
+# WP-01: Reference-Core-Modelle werden NUR fuer Alembic registriert, nicht in
+# app.models.__init__ (der Anwendungsstart/create_all bleibt unveraendert).
+from app.models import reference_core  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.effective_sync_database_url)
